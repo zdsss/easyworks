@@ -106,7 +106,7 @@ public class ReportService {
         // Update work order
         updateWorkOrderOnReport(operation.getWorkOrderId());
 
-        log.info("Operation {} reported {} units by user {}", operationId, toReport, userId);
+        log.info("Operation {} reported {} units by user {}", request.getOperationId(), toReport, userId);
         return record;
     }
 
