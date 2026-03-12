@@ -22,10 +22,10 @@ easyworks/
 - **数据库**：PostgreSQL 15（端口 5432，库名 `workorder_db`）
 - **缓存**：Redis（端口 6379）
 - **运行端口**：`8080`
-- **启动命令**：`docker-compose up -d postgres redis` → `mvn spring-boot:run`
+- **启动命令**：`docker-compose up -d postgres redis` → 见下方"Windows 工具路径"运行命令
 - **Swagger**：`http://localhost:8080/swagger-ui.html`
 - **包路径**：`com.xiaobai.workorder`
-- **测试**：98 个单元测试，全部通过（`mvn test`）
+- **测试**：113 个单元测试，全部通过
 
 ### easywork-admin（管理端前端）
 - **技术栈**：Vue 3 / Vite / Element Plus / Vue Router / Pinia / Axios
@@ -116,6 +116,44 @@ Worker：http://localhost:5174
 ```
 NOT_STARTED → STARTED → REPORTED → INSPECT_PASSED / INSPECT_FAILED → COMPLETED
 ```
+
+---
+
+## Windows 工具路径（固定配置，必须使用完整路径）
+
+> **重要**：在此项目执行 Java/Maven 命令，必须使用以下完整路径，不要使用裸命令 `mvn`（会报 command not found）。
+
+| 工具 | 路径 |
+|------|------|
+| Java 21 | `D:/Software/Java21` |
+| Maven 3.9.13 | `D:/Software/apache-maven-3.9.13/bin/mvn` |
+
+**标准测试命令（在 `easywork/` 目录下执行）：**
+
+```bash
+JAVA_HOME="D:/Software/Java21" "D:/Software/apache-maven-3.9.13/bin/mvn" test
+```
+
+**后端启动命令：**
+
+```bash
+JAVA_HOME="D:/Software/Java21" "D:/Software/apache-maven-3.9.13/bin/mvn" spring-boot:run
+```
+
+---
+
+## 项目配置目录结构
+
+```
+easyworks/
+├── .claude/
+│   ├── settings.local.json   ← Claude 本地权限配置（不纳入 git 追踪）
+│   └── plans/                ← 实现计划 md 文件（纳入 git 追踪）
+└── doc/                      ← 项目技术文档（流程图、模块说明、类文档）
+```
+
+- **Plans 存放位置**：`.claude/plans/`（本项目目录，不要写入 C:\Users 下）
+- **技术文档**：`doc/` 目录
 
 ---
 

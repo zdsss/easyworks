@@ -26,8 +26,9 @@ easywork-worker/dist/
 .env.local
 .env.*.local
 
-# Claude internal
-.claude/
+# Claude internal (settings 本地私有，plans 纳入追踪)
+.claude/settings.local.json
+.claude/settings.json
 
 # Git worktrees
 .worktrees/
