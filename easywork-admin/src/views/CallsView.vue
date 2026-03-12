@@ -72,6 +72,7 @@ onMounted(loadCalls)
       <h2 style="margin: 0">呼叫管理</h2>
       <div style="display: flex; gap: 12px; align-items: center">
         <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 140px" @change="loadCalls">
+          <el-option label="全部" value="" />
           <el-option label="待处理" value="NOT_HANDLED" />
           <el-option label="处理中" value="HANDLING" />
           <el-option label="已完成" value="HANDLED" />
@@ -112,7 +113,7 @@ onMounted(loadCalls)
         v-model:page-size="pageSize"
         :page-sizes="[10, 20, 50]"
         layout="total, sizes, prev, pager, next"
-        :total="0"
+        :total="calls.length"
         @size-change="loadCalls"
         @current-change="loadCalls"
       />
