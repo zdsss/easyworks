@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Mapper
@@ -38,4 +39,12 @@ public interface ReportRecordMapper extends BaseMapper<ReportRecord> {
         WHERE operation_id = #{operationId} AND is_undone = false AND deleted = 0
         """)
     BigDecimal sumReportedQuantityByOperationId(@Param("operationId") Long operationId);
+
+    @Select("""
+        SELECT user_id, COUNT(*) AS report_count,
+               COALESCE(SUM(reported_quantity), 0) AS total_reported
+        FROM report_records WHERE is_undone = false AND deleted = 0
+        GROUP BY user_id
+        """)
+    List<Map<String, Object>> sumByUser();
 }

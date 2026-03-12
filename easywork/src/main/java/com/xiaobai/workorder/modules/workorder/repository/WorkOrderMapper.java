@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Mapper
@@ -18,6 +19,17 @@ public interface WorkOrderMapper extends BaseMapper<WorkOrder> {
                         .eq(WorkOrder::getOrderNumber, orderNumber)
                         .eq(WorkOrder::getDeleted, 0)));
     }
+
+    @Select("""
+        SELECT status, COUNT(*) AS cnt FROM work_orders WHERE deleted = 0 GROUP BY status
+        """)
+    List<Map<String, Object>> countByStatus();
+
+    @Select("""
+        SELECT order_type, status, COUNT(*) AS cnt FROM work_orders WHERE deleted = 0
+        GROUP BY order_type, status
+        """)
+    List<Map<String, Object>> countByTypeAndStatus();
 
     @Select("""
         SELECT DISTINCT wo.* FROM work_orders wo

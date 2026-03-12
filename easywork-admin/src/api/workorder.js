@@ -15,3 +15,11 @@ export function createWorkOrder(data) {
 export function assignWorkOrder(data) {
   return http.post('/admin/work-orders/assign', data)
 }
+
+export function completeWorkOrder(id) {
+  return http.put(`/admin/work-orders/${id}/complete`)
+}
+
+export function reopenWorkOrder(id) {
+  return http.put(`/admin/work-orders/${id}/reopen`)
+}

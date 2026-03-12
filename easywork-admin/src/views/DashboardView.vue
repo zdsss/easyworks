@@ -1,12 +1,37 @@
 <template>
   <div>
     <el-row :gutter="16" class="stat-row">
-      <el-col :span="6" v-for="stat in stats" :key="stat.label">
+      <el-col :span="24 / stats.length" v-for="stat in stats" :key="stat.label">
         <el-card shadow="never">
           <el-statistic :title="stat.label" :value="stat.value" />
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card shadow="never" style="margin-top: 16px">
+      <template #header>
+        <span>整体完成率</span>
+      </template>
+      <div style="padding: 8px 0">
+        <el-progress
+          :percentage="completionRate"
+          :format="(p) => p + '%'"
+          status="success"
+          :stroke-width="18"
+        />
+      </div>
+    </el-card>
+
+    <el-card shadow="never" style="margin-top: 16px">
+      <template #header>
+        <span>工单类型分布</span>
+      </template>
+      <el-table :data="typeStats" stripe>
+        <el-table-column prop="orderType" label="工单类型" />
+        <el-table-column prop="total" label="总数" width="100" />
+        <el-table-column prop="completedCount" label="已完成" width="100" />
+      </el-table>
+    </el-card>
 
     <el-card shadow="never" style="margin-top: 16px">
       <template #header>
@@ -30,9 +55,12 @@ const loading = ref(false)
 const stats = ref([
   { label: '总工单数', value: 0 },
   { label: '进行中', value: 0 },
-  { label: '待质检', value: 0 },
+  { label: '已报工', value: 0 },
   { label: '已完成', value: 0 },
+  { label: '未开始', value: 0 },
 ])
+const completionRate = ref(0)
+const typeStats = ref([])
 const workerOutput = ref([])
 
 async function loadData() {
@@ -45,7 +73,11 @@ async function loadData() {
         { label: '进行中', value: data.startedCount ?? 0 },
         { label: '已报工', value: data.reportedCount ?? 0 },
         { label: '已完成', value: data.completedCount ?? 0 },
+        { label: '未开始', value: data.notStartedCount ?? 0 },
       ]
+      const rate = data.overallCompletionRate
+      completionRate.value = rate != null ? Math.round(Number(rate) * 100) : 0
+      typeStats.value = data.typeStats ?? []
       workerOutput.value = data.workerStats ?? []
     }
   } catch {

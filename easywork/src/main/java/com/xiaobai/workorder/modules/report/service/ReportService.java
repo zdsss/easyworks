@@ -51,7 +51,11 @@ public class ReportService {
 
     @Transactional
     public ReportRecord reportWork(ReportRequest request, Long userId, Long deviceId) {
-        Operation operation = getOperationOrThrow(request.getOperationId());
+        // Pessimistic lock: prevent concurrent over-reporting on the same operation
+        Operation operation = operationMapper.selectByIdForUpdate(request.getOperationId());
+        if (operation == null || operation.getDeleted() == 1) {
+            throw new BusinessException("Operation not found: " + request.getOperationId());
+        }
 
         if (!"STARTED".equals(operation.getStatus()) && !"NOT_STARTED".equals(operation.getStatus())) {
             throw new BusinessException("Operation cannot be reported, current status: " + operation.getStatus());

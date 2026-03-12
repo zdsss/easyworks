@@ -1,11 +1,9 @@
 package com.xiaobai.workorder.modules.statistics.service;
 
-import com.xiaobai.workorder.modules.report.entity.ReportRecord;
 import com.xiaobai.workorder.modules.report.repository.ReportRecordMapper;
 import com.xiaobai.workorder.modules.statistics.dto.StatisticsDTO;
 import com.xiaobai.workorder.modules.user.entity.User;
 import com.xiaobai.workorder.modules.user.repository.UserMapper;
-import com.xiaobai.workorder.modules.workorder.entity.WorkOrder;
 import com.xiaobai.workorder.modules.workorder.repository.WorkOrderMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,9 +13,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,8 +29,9 @@ class StatisticsServiceTest {
 
     @Test
     void getDashboardStats_noData_returnsAllZeros() {
-        when(workOrderMapper.selectList(any())).thenReturn(List.of());
-        when(reportRecordMapper.selectList(any())).thenReturn(List.of());
+        when(workOrderMapper.countByStatus()).thenReturn(List.of());
+        when(workOrderMapper.countByTypeAndStatus()).thenReturn(List.of());
+        when(reportRecordMapper.sumByUser()).thenReturn(List.of());
 
         StatisticsDTO stats = statisticsService.getDashboardStats();
 
@@ -46,12 +45,12 @@ class StatisticsServiceTest {
 
     @Test
     void getDashboardStats_correctTotalCount() {
-        List<WorkOrder> orders = List.of(
-                buildWorkOrder(1L, "NOT_STARTED", "PRODUCTION"),
-                buildWorkOrder(2L, "STARTED", "PRODUCTION"),
-                buildWorkOrder(3L, "REPORTED", "PRODUCTION"));
-        when(workOrderMapper.selectList(any())).thenReturn(orders);
-        when(reportRecordMapper.selectList(any())).thenReturn(List.of());
+        when(workOrderMapper.countByStatus()).thenReturn(List.of(
+                Map.of("status", "NOT_STARTED", "cnt", 1L),
+                Map.of("status", "STARTED", "cnt", 1L),
+                Map.of("status", "REPORTED", "cnt", 1L)));
+        when(workOrderMapper.countByTypeAndStatus()).thenReturn(List.of());
+        when(reportRecordMapper.sumByUser()).thenReturn(List.of());
 
         StatisticsDTO stats = statisticsService.getDashboardStats();
 
@@ -60,13 +59,13 @@ class StatisticsServiceTest {
 
     @Test
     void getDashboardStats_correctStatusCounts() {
-        List<WorkOrder> orders = List.of(
-                buildWorkOrder(1L, "NOT_STARTED", "PRODUCTION"),
-                buildWorkOrder(2L, "STARTED", "PRODUCTION"),
-                buildWorkOrder(3L, "REPORTED", "PRODUCTION"),
-                buildWorkOrder(4L, "INSPECT_PASSED", "PRODUCTION"));
-        when(workOrderMapper.selectList(any())).thenReturn(orders);
-        when(reportRecordMapper.selectList(any())).thenReturn(List.of());
+        when(workOrderMapper.countByStatus()).thenReturn(List.of(
+                Map.of("status", "NOT_STARTED", "cnt", 1L),
+                Map.of("status", "STARTED", "cnt", 1L),
+                Map.of("status", "REPORTED", "cnt", 1L),
+                Map.of("status", "INSPECT_PASSED", "cnt", 1L)));
+        when(workOrderMapper.countByTypeAndStatus()).thenReturn(List.of());
+        when(reportRecordMapper.sumByUser()).thenReturn(List.of());
 
         StatisticsDTO stats = statisticsService.getDashboardStats();
 
@@ -78,28 +77,28 @@ class StatisticsServiceTest {
 
     @Test
     void getDashboardStats_correctCompletionRate() {
-        List<WorkOrder> orders = List.of(
-                buildWorkOrder(1L, "NOT_STARTED", "PRODUCTION"),
-                buildWorkOrder(2L, "REPORTED", "PRODUCTION"),
-                buildWorkOrder(3L, "INSPECT_PASSED", "PRODUCTION"),
-                buildWorkOrder(4L, "STARTED", "PRODUCTION"));
-        when(workOrderMapper.selectList(any())).thenReturn(orders);
-        when(reportRecordMapper.selectList(any())).thenReturn(List.of());
+        // 4 total: NOT_STARTED, STARTED, REPORTED, INSPECT_PASSED → 2 done → 50%
+        when(workOrderMapper.countByStatus()).thenReturn(List.of(
+                Map.of("status", "NOT_STARTED", "cnt", 1L),
+                Map.of("status", "STARTED", "cnt", 1L),
+                Map.of("status", "REPORTED", "cnt", 1L),
+                Map.of("status", "INSPECT_PASSED", "cnt", 1L)));
+        when(workOrderMapper.countByTypeAndStatus()).thenReturn(List.of());
+        when(reportRecordMapper.sumByUser()).thenReturn(List.of());
 
         StatisticsDTO stats = statisticsService.getDashboardStats();
 
-        // (1 reported + 1 inspected_passed) / 4 * 100 = 50.0
         assertThat(stats.getOverallCompletionRate()).isEqualByComparingTo("50.0");
     }
 
     @Test
     void getDashboardStats_typeStatsGroupedByOrderType() {
-        List<WorkOrder> orders = List.of(
-                buildWorkOrder(1L, "NOT_STARTED", "PRODUCTION"),
-                buildWorkOrder(2L, "STARTED", "PRODUCTION"),
-                buildWorkOrder(3L, "NOT_STARTED", "INSPECTION"));
-        when(workOrderMapper.selectList(any())).thenReturn(orders);
-        when(reportRecordMapper.selectList(any())).thenReturn(List.of());
+        when(workOrderMapper.countByStatus()).thenReturn(List.of(
+                Map.of("status", "NOT_STARTED", "cnt", 3L)));
+        when(workOrderMapper.countByTypeAndStatus()).thenReturn(List.of(
+                Map.of("order_type", "PRODUCTION", "status", "NOT_STARTED", "cnt", 2L),
+                Map.of("order_type", "INSPECTION", "status", "NOT_STARTED", "cnt", 1L)));
+        when(reportRecordMapper.sumByUser()).thenReturn(List.of());
 
         StatisticsDTO stats = statisticsService.getDashboardStats();
 
@@ -111,12 +110,11 @@ class StatisticsServiceTest {
 
     @Test
     void getDashboardStats_workerStatsComputedCorrectly() {
-        List<WorkOrder> orders = List.of(buildWorkOrder(1L, "REPORTED", "PRODUCTION"));
-        when(workOrderMapper.selectList(any())).thenReturn(orders);
-
-        ReportRecord r1 = buildReportRecord(1L, 10L, new BigDecimal("5"));
-        ReportRecord r2 = buildReportRecord(2L, 10L, new BigDecimal("3"));
-        when(reportRecordMapper.selectList(any())).thenReturn(List.of(r1, r2));
+        when(workOrderMapper.countByStatus()).thenReturn(List.of(
+                Map.of("status", "REPORTED", "cnt", 1L)));
+        when(workOrderMapper.countByTypeAndStatus()).thenReturn(List.of());
+        when(reportRecordMapper.sumByUser()).thenReturn(List.of(
+                Map.of("userId", 10L, "reportCount", 2L, "totalReported", new BigDecimal("8"))));
 
         User user = new User();
         user.setId(10L);
@@ -130,28 +128,5 @@ class StatisticsServiceTest {
         StatisticsDTO.WorkerStat ws = stats.getWorkerStats().get(0);
         assertThat(ws.getReportCount()).isEqualTo(2L);
         assertThat(ws.getTotalReported()).isEqualByComparingTo("8");
-    }
-
-    // ---------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------
-
-    private WorkOrder buildWorkOrder(Long id, String status, String type) {
-        WorkOrder wo = new WorkOrder();
-        wo.setId(id);
-        wo.setStatus(status);
-        wo.setOrderType(type);
-        wo.setDeleted(0);
-        return wo;
-    }
-
-    private ReportRecord buildReportRecord(Long id, Long userId, BigDecimal qty) {
-        ReportRecord r = new ReportRecord();
-        r.setId(id);
-        r.setUserId(userId);
-        r.setReportedQuantity(qty);
-        r.setIsUndone(false);
-        r.setDeleted(0);
-        return r;
     }
 }

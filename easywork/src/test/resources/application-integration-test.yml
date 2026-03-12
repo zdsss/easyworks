@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/workorder_db
+    username: workorder_user
+    password: workorder_pass
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+app:
+  jwt:
+    secret: integration-test-jwt-secret-key-minimum-32-chars
+    expiration: 3600000
+  security:
+    allowed-origins: http://localhost:5173,http://localhost:5174
+  mes:
+    integration:
+      enabled: false
+      base-url: http://localhost:9999
+      api-key: ""
+
+logging:
+  level:
+    root: WARN
+    com.xiaobai.workorder: DEBUG

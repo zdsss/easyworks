@@ -10,6 +10,9 @@ import com.xiaobai.workorder.modules.auth.service.AuthService;
 import com.xiaobai.workorder.modules.call.entity.CallRecord;
 import com.xiaobai.workorder.modules.call.service.CallService;
 import com.xiaobai.workorder.modules.device.service.DeviceService;
+import com.xiaobai.workorder.modules.inspection.entity.InspectionRecord;
+import com.xiaobai.workorder.modules.inspection.service.InspectionService;
+import com.xiaobai.workorder.modules.operation.repository.OperationMapper;
 import com.xiaobai.workorder.modules.report.dto.ReportRequest;
 import com.xiaobai.workorder.modules.report.dto.UndoReportRequest;
 import com.xiaobai.workorder.modules.report.entity.ReportRecord;
@@ -52,6 +55,8 @@ class DeviceControllerTest {
     @MockBean ReportService reportService;
     @MockBean CallService callService;
     @MockBean DeviceService deviceService;
+    @MockBean InspectionService inspectionService;
+    @MockBean OperationMapper operationMapper;
     @MockBean SecurityUtils securityUtils;
     @MockBean JwtTokenProvider jwtTokenProvider;
     @MockBean UserDetailsServiceImpl userDetailsServiceImpl;
@@ -204,6 +209,20 @@ class DeviceControllerTest {
     void getWorkOrders_noAuthentication_returns403() throws Exception {
         mockMvc.perform(get("/api/device/work-orders"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_return200_when_getInspectionDetail() throws Exception {
+        InspectionRecord record = new InspectionRecord();
+        record.setId(1L);
+        record.setWorkOrderId(5L);
+        record.setInspectionResult("PASSED");
+        when(inspectionService.getLatestByWorkOrderId(5L)).thenReturn(record);
+
+        mockMvc.perform(get("/api/device/inspections/5")
+                        .with(user("worker").roles("WORKER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.inspectionResult").value("PASSED"));
     }
 
     // ---------------------------------------------------------------

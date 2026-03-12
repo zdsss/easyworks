@@ -32,13 +32,14 @@ public class AdminWorkOrderController {
         return ApiResponse.success(workOrderService.createWorkOrder(request, userId));
     }
 
-    @Operation(summary = "List all work orders with optional status filter")
+    @Operation(summary = "List all work orders with optional status and productName filter")
     @GetMapping
     public ApiResponse<List<WorkOrderDTO>> listWorkOrders(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String status) {
-        return ApiResponse.success(workOrderService.listAllWorkOrders(page, size, status));
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String productName) {
+        return ApiResponse.success(workOrderService.listAllWorkOrders(page, size, status, productName));
     }
 
     @Operation(summary = "Get work order detail by ID")
@@ -52,5 +53,19 @@ public class AdminWorkOrderController {
     public ApiResponse<Void> assignWorkOrder(@Valid @RequestBody AssignWorkOrderRequest request) {
         workOrderService.assignWorkOrder(request);
         return ApiResponse.success("Assignment successful", null);
+    }
+
+    @Operation(summary = "Complete a work order (INSPECT_PASSED → COMPLETED)")
+    @PutMapping("/{id}/complete")
+    public ApiResponse<Void> completeWorkOrder(@PathVariable Long id) {
+        workOrderService.completeWorkOrder(id);
+        return ApiResponse.success("Work order completed", null);
+    }
+
+    @Operation(summary = "Reopen work order for rework (INSPECT_FAILED → REPORTED)")
+    @PutMapping("/{id}/reopen")
+    public ApiResponse<Void> reopenWorkOrder(@PathVariable Long id) {
+        workOrderService.reopenWorkOrder(id);
+        return ApiResponse.success("Work order reopened for rework", null);
     }
 }

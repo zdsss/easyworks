@@ -1,5 +1,6 @@
 package com.xiaobai.workorder.modules.inspection.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xiaobai.workorder.common.exception.BusinessException;
 import com.xiaobai.workorder.modules.inspection.dto.InspectionRequest;
 import com.xiaobai.workorder.modules.inspection.entity.InspectionRecord;
@@ -72,5 +73,17 @@ public class InspectionService {
         log.info("Inspection {} submitted for work order {} by inspector {}",
                 request.getInspectionResult(), request.getWorkOrderId(), inspectorId);
         return record;
+    }
+
+    public InspectionRecord getLatestByWorkOrderId(Long workOrderId) {
+        return inspectionRecordMapper.selectList(
+                new LambdaQueryWrapper<InspectionRecord>()
+                        .eq(InspectionRecord::getWorkOrderId, workOrderId)
+                        .eq(InspectionRecord::getDeleted, 0)
+                        .orderByDesc(InspectionRecord::getInspectionTime)
+                        .last("LIMIT 1")
+        ).stream().findFirst().orElseThrow(
+                () -> new BusinessException("No inspection record found for work order: " + workOrderId)
+        );
     }
 }

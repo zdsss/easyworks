@@ -113,6 +113,7 @@ async function loadData(page = pagination.current) {
       page,
       size: pagination.size,
       ...(filters.status && { status: filters.status }),
+      ...(filters.productName && { productName: filters.productName }),
     }
     const data = await getWorkOrders(params)
     // API returns array directly

@@ -3,6 +3,7 @@ package com.xiaobai.workorder.modules.workorder.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xiaobai.workorder.common.exception.BusinessException;
+import com.xiaobai.workorder.modules.mesintegration.event.WorkOrderStatusChangedEvent;
 import com.xiaobai.workorder.modules.operation.entity.Operation;
 import com.xiaobai.workorder.modules.operation.entity.OperationAssignment;
 import com.xiaobai.workorder.modules.operation.repository.OperationAssignmentMapper;
@@ -14,13 +15,16 @@ import com.xiaobai.workorder.modules.workorder.entity.WorkOrder;
 import com.xiaobai.workorder.modules.workorder.repository.WorkOrderMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -30,6 +34,7 @@ public class WorkOrderService {
     private final WorkOrderMapper workOrderMapper;
     private final OperationMapper operationMapper;
     private final OperationAssignmentMapper assignmentMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public WorkOrderDTO createWorkOrder(CreateWorkOrderRequest request, Long createdBy) {
@@ -123,6 +128,11 @@ public class WorkOrderService {
                 .filter(t -> directOrders.stream().noneMatch(d -> d.getId().equals(t.getId())))
                 .forEach(combined::add);
 
+        // Batch-load all operations (avoids N+1 queries)
+        List<Long> ids = combined.stream().map(WorkOrder::getId).toList();
+        Map<Long, List<Operation>> opsByWorkOrder = operationMapper.findByWorkOrderIds(ids)
+                .stream().collect(Collectors.groupingBy(Operation::getWorkOrderId));
+
         return combined.stream()
                 .sorted((a, b) -> {
                     int pCmp = Integer.compare(b.getPriority(), a.getPriority());
@@ -132,7 +142,7 @@ public class WorkOrderService {
                     }
                     return 0;
                 })
-                .map(this::toDTO)
+                .map(wo -> toDTOWithOperations(wo, opsByWorkOrder.getOrDefault(wo.getId(), List.of())))
                 .toList();
     }
 
@@ -144,7 +154,7 @@ public class WorkOrderService {
         return toDTO(workOrder);
     }
 
-    public List<WorkOrderDTO> listAllWorkOrders(int page, int size, String status) {
+    public List<WorkOrderDTO> listAllWorkOrders(int page, int size, String status, String productName) {
         LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<WorkOrder>()
                 .eq(WorkOrder::getDeleted, 0)
                 .orderByDesc(WorkOrder::getPriority)
@@ -152,8 +162,55 @@ public class WorkOrderService {
         if (status != null && !status.isBlank()) {
             wrapper.eq(WorkOrder::getStatus, status);
         }
-        Page<WorkOrder> pageResult = workOrderMapper.selectPage(new Page<>(page, size), wrapper);
-        return pageResult.getRecords().stream().map(this::toDTO).toList();
+        if (productName != null && !productName.isBlank()) {
+            wrapper.like(WorkOrder::getProductName, productName);
+        }
+        List<WorkOrder> records = workOrderMapper.selectPage(new Page<>(page, size), wrapper).getRecords();
+
+        // Batch-load all operations for this page (avoids N+1 queries)
+        List<Long> ids = records.stream().map(WorkOrder::getId).toList();
+        Map<Long, List<Operation>> opsByWorkOrder = operationMapper.findByWorkOrderIds(ids)
+                .stream().collect(Collectors.groupingBy(Operation::getWorkOrderId));
+
+        return records.stream()
+                .map(wo -> toDTOWithOperations(wo, opsByWorkOrder.getOrDefault(wo.getId(), List.of())))
+                .toList();
+    }
+
+    @Transactional
+    public void completeWorkOrder(Long id) {
+        WorkOrder workOrder = workOrderMapper.selectById(id);
+        if (workOrder == null || workOrder.getDeleted() == 1) {
+            throw new BusinessException("Work order not found: " + id);
+        }
+        if (!"INSPECT_PASSED".equals(workOrder.getStatus())) {
+            throw new BusinessException(
+                    "Work order must be in INSPECT_PASSED status to complete, current: " + workOrder.getStatus());
+        }
+        String previousStatus = workOrder.getStatus();
+        workOrder.setStatus("COMPLETED");
+        workOrderMapper.updateById(workOrder);
+        eventPublisher.publishEvent(new WorkOrderStatusChangedEvent(
+                this, id, previousStatus, "COMPLETED", null));
+        log.info("Work order {} completed", id);
+    }
+
+    @Transactional
+    public void reopenWorkOrder(Long id) {
+        WorkOrder workOrder = workOrderMapper.selectById(id);
+        if (workOrder == null || workOrder.getDeleted() == 1) {
+            throw new BusinessException("Work order not found: " + id);
+        }
+        if (!"INSPECT_FAILED".equals(workOrder.getStatus())) {
+            throw new BusinessException(
+                    "Work order must be in INSPECT_FAILED status to reopen, current: " + workOrder.getStatus());
+        }
+        String previousStatus = workOrder.getStatus();
+        workOrder.setStatus("REPORTED");
+        workOrderMapper.updateById(workOrder);
+        eventPublisher.publishEvent(new WorkOrderStatusChangedEvent(
+                this, id, previousStatus, "REPORTED", null));
+        log.info("Work order {} reopened for rework", id);
     }
 
     public WorkOrderDTO getWorkOrderByBarcode(String barcode, Long userId) {
@@ -163,6 +220,10 @@ public class WorkOrderService {
     }
 
     private WorkOrderDTO toDTO(WorkOrder workOrder) {
+        return toDTOWithOperations(workOrder, operationMapper.findByWorkOrderId(workOrder.getId()));
+    }
+
+    private WorkOrderDTO toDTOWithOperations(WorkOrder workOrder, List<Operation> operations) {
         WorkOrderDTO dto = new WorkOrderDTO();
         dto.setId(workOrder.getId());
         dto.setOrderNumber(workOrder.getOrderNumber());
@@ -184,7 +245,6 @@ public class WorkOrderService {
         dto.setProductionLine(workOrder.getProductionLine());
         dto.setNotes(workOrder.getNotes());
 
-        List<Operation> operations = operationMapper.findByWorkOrderId(workOrder.getId());
         dto.setOperations(operations.stream().map(op -> {
             WorkOrderDTO.OperationSummary summary = new WorkOrderDTO.OperationSummary();
             summary.setId(op.getId());

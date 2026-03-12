@@ -119,9 +119,11 @@ NOT_STARTED → STARTED → REPORTED → INSPECT_PASSED / INSPECT_FAILED → COM
 
 ---
 
-## Windows 工具路径（固定配置，必须使用完整路径）
+## 工具路径（固定配置，必须使用完整路径）
 
 > **重要**：在此项目执行 Java/Maven 命令，必须使用以下完整路径，不要使用裸命令 `mvn`（会报 command not found）。
+
+### Windows 10
 
 | 工具 | 路径 |
 |------|------|
@@ -138,6 +140,25 @@ JAVA_HOME="D:/Software/Java21" "D:/Software/apache-maven-3.9.13/bin/mvn" test
 
 ```bash
 JAVA_HOME="D:/Software/Java21" "D:/Software/apache-maven-3.9.13/bin/mvn" spring-boot:run
+```
+
+### macOS
+
+| 工具 | 路径 |
+|------|------|
+| Java 21 | `/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home` |
+| Maven 3.9.13 | `/opt/homebrew/bin/mvn` |
+
+**标准测试命令（在 `easywork/` 目录下执行）：**
+
+```bash
+JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home" /opt/homebrew/bin/mvn test
+```
+
+**后端启动命令：**
+
+```bash
+JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home" /opt/homebrew/bin/mvn spring-boot:run
 ```
 
 ---

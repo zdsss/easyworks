@@ -7,3 +7,7 @@ export function getWorkOrders(params) {
 export function getWorkOrder(id) {
   return http.get(`/device/work-orders/${id}`)
 }
+
+export function getInspectionDetail(workOrderId) {
+  return http.get(`/device/inspections/${workOrderId}`)
+}

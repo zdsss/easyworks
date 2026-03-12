@@ -77,7 +77,7 @@ class AdminWorkOrderControllerTest {
 
     @Test
     void listWorkOrders_returns200WithList() throws Exception {
-        when(workOrderService.listAllWorkOrders(anyInt(), anyInt(), nullable(String.class)))
+        when(workOrderService.listAllWorkOrders(anyInt(), anyInt(), nullable(String.class), nullable(String.class)))
                 .thenReturn(List.of(buildWorkOrderDTO(1L, "WO-001")));
 
         mockMvc.perform(get("/api/admin/work-orders")
@@ -120,6 +120,33 @@ class AdminWorkOrderControllerTest {
                         .with(user("worker").roles("WORKER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void completeWorkOrder_validId_returns200() throws Exception {
+        doNothing().when(workOrderService).completeWorkOrder(1L);
+
+        mockMvc.perform(put("/api/admin/work-orders/1/complete")
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Work order completed"));
+    }
+
+    @Test
+    void reopenWorkOrder_validId_returns200() throws Exception {
+        doNothing().when(workOrderService).reopenWorkOrder(1L);
+
+        mockMvc.perform(put("/api/admin/work-orders/1/reopen")
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Work order reopened for rework"));
+    }
+
+    @Test
+    void completeWorkOrder_workerRole_returns403() throws Exception {
+        mockMvc.perform(put("/api/admin/work-orders/1/complete")
+                        .with(user("worker").roles("WORKER")))
                 .andExpect(status().isForbidden());
     }
 

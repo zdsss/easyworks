@@ -27,6 +27,18 @@
 
       <div style="margin-top: 24px; display: flex; gap: 12px">
         <el-button type="primary" @click="openAssignDialog">派工</el-button>
+        <el-button
+          v-if="workorder.status === 'INSPECT_PASSED'"
+          type="success"
+          :loading="completing"
+          @click="handleComplete"
+        >完成工单</el-button>
+        <el-button
+          v-if="workorder.status === 'INSPECT_FAILED'"
+          type="warning"
+          :loading="reopening"
+          @click="handleReopen"
+        >返工</el-button>
       </div>
     </el-card>
 
@@ -99,7 +111,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getWorkOrder, assignWorkOrder } from '@/api/workorder'
+import { getWorkOrder, assignWorkOrder, completeWorkOrder, reopenWorkOrder } from '@/api/workorder'
 import { getUsers } from '@/api/user'
 import { getTeams } from '@/api/team'
 
@@ -108,6 +120,8 @@ const loading = ref(false)
 const workorder = ref(null)
 const assignVisible = ref(false)
 const assigning = ref(false)
+const completing = ref(false)
+const reopening = ref(false)
 const users = ref([])
 const teams = ref([])
 
@@ -187,6 +201,32 @@ async function handleAssign() {
     // handled
   } finally {
     assigning.value = false
+  }
+}
+
+async function handleComplete() {
+  completing.value = true
+  try {
+    await completeWorkOrder(workorder.value.id)
+    ElMessage.success('工单已完成')
+    await loadWorkOrder()
+  } catch {
+    // handled in interceptor
+  } finally {
+    completing.value = false
+  }
+}
+
+async function handleReopen() {
+  reopening.value = true
+  try {
+    await reopenWorkOrder(workorder.value.id)
+    ElMessage.success('工单已返工，等待重新报工')
+    await loadWorkOrder()
+  } catch {
+    // handled in interceptor
+  } finally {
+    reopening.value = false
   }
 }
 

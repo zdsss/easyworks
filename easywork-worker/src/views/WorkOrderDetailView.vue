@@ -74,6 +74,31 @@
           </van-button>
         </div>
       </div>
+      <!-- 质检结果卡片 -->
+      <div
+        v-if="workorder.status === 'INSPECT_PASSED' || workorder.status === 'INSPECT_FAILED'"
+        class="section-title"
+      >
+        质检结果
+      </div>
+      <van-cell-group
+        v-if="(workorder.status === 'INSPECT_PASSED' || workorder.status === 'INSPECT_FAILED') && inspection"
+        inset
+        style="margin-bottom: 12px"
+      >
+        <van-cell title="检验结果">
+          <template #value>
+            <van-tag :type="inspection.inspectionResult === 'PASSED' ? 'success' : 'danger'">
+              {{ inspection.inspectionResult === 'PASSED' ? '通过' : '不通过' }}
+            </van-tag>
+          </template>
+        </van-cell>
+        <van-cell title="合格数量" :value="inspection.qualifiedQuantity ?? '-'" />
+        <van-cell title="不合格数量" :value="inspection.defectQuantity ?? '-'" />
+        <van-cell title="不合格原因" :value="inspection.defectReason || '-'" />
+        <van-cell title="检验时间" :value="formatDate(inspection.inspectionTime)" />
+      </van-cell-group>
+
       <!-- 呼叫按鈕 -->
       <div class="call-section">
         <van-button round block type="warning" icon="phone-o" @click="goToCall">
@@ -140,13 +165,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getWorkOrders } from '@/api/workorder'
+import { getWorkOrders, getInspectionDetail } from '@/api/workorder'
 import { startWork, reportWork, undoReport } from '@/api/report'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const workorder = ref(null)
+const inspection = ref(null)
 const actionLoading = reactive({})
 const reportVisible = ref(false)
 const undoVisible = ref(false)
@@ -165,6 +191,11 @@ const statusMap = {
 function statusLabel(s) { return statusMap[s]?.label ?? s }
 function statusTagType(s) { return statusMap[s]?.type ?? 'default' }
 
+function formatDate(val) {
+  if (!val) return '-'
+  return new Date(val).toLocaleString('zh-CN', { hour12: false })
+}
+
 async function loadWorkOrder() {
   loading.value = true
   try {
@@ -174,6 +205,14 @@ async function loadWorkOrder() {
     workorder.value = (Array.isArray(list) ? list : []).find((o) => o.id === id) ?? null
     if (!workorder.value) {
       showToast('工单不存在或无权限访问')
+      return
+    }
+    if (workorder.value.status === 'INSPECT_PASSED' || workorder.value.status === 'INSPECT_FAILED') {
+      try {
+        inspection.value = await getInspectionDetail(workorder.value.id)
+      } catch {
+        inspection.value = null
+      }
     }
   } catch {
     // handled

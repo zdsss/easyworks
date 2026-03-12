@@ -9,7 +9,10 @@ import com.xiaobai.workorder.modules.auth.service.AuthService;
 import com.xiaobai.workorder.modules.call.dto.CallRequest;
 import com.xiaobai.workorder.modules.call.entity.CallRecord;
 import com.xiaobai.workorder.modules.call.service.CallService;
+import com.xiaobai.workorder.modules.inspection.entity.InspectionRecord;
+import com.xiaobai.workorder.modules.inspection.service.InspectionService;
 import com.xiaobai.workorder.modules.device.service.DeviceService;
+import com.xiaobai.workorder.modules.operation.repository.OperationMapper;
 import com.xiaobai.workorder.modules.report.dto.ReportRequest;
 import com.xiaobai.workorder.modules.report.dto.UndoReportRequest;
 import com.xiaobai.workorder.modules.report.entity.ReportRecord;
@@ -22,6 +25,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +40,8 @@ public class DeviceController {
     private final ReportService reportService;
     private final CallService callService;
     private final DeviceService deviceService;
+    private final InspectionService inspectionService;
+    private final OperationMapper operationMapper;
     private final SecurityUtils securityUtils;
 
     @Operation(summary = "Device login with employee number and password")
@@ -79,7 +85,7 @@ public class DeviceController {
         return ApiResponse.success(record);
     }
 
-    @Operation(summary = "Scan barcode to start work - auto-resolves operation for worker")
+    @Operation(summary = "Scan barcode to start work - supports both work-order and operation barcodes")
     @PostMapping("/scan/start")
     public ApiResponse<WorkOrderDTO> scanStart(@RequestBody Map<String, String> body) {
         String barcode = body.get("barcode");
@@ -87,18 +93,25 @@ public class DeviceController {
             throw new BusinessException("barcode is required");
         }
         Long userId = securityUtils.getCurrentUserId();
-        WorkOrderDTO workOrder = workOrderService.getWorkOrderByBarcode(barcode, userId);
 
-        // Find and start the earliest unfinished operation for this user
+        // Try operation barcode first (precise targeting for multi-operation scenarios)
+        java.util.Optional<com.xiaobai.workorder.modules.operation.entity.Operation> byOpNumber = operationMapper.findByOperationNumber(barcode);
+        if (byOpNumber.isPresent()) {
+            com.xiaobai.workorder.modules.operation.entity.Operation op = byOpNumber.get();
+            reportService.startWork(op.getId(), userId);
+            return ApiResponse.success(workOrderService.getWorkOrderById(op.getWorkOrderId()));
+        }
+
+        // Fall back to work-order barcode: start the first unfinished operation
+        WorkOrderDTO workOrder = workOrderService.getWorkOrderByBarcode(barcode, userId);
         workOrder.getOperations().stream()
                 .filter(op -> "NOT_STARTED".equals(op.getStatus()) || "STARTED".equals(op.getStatus()))
                 .findFirst()
                 .ifPresent(op -> reportService.startWork(op.getId(), userId));
-
         return ApiResponse.success(workOrderService.getWorkOrderById(workOrder.getId()));
     }
 
-    @Operation(summary = "Scan barcode to report work - auto-resolves operation for worker")
+    @Operation(summary = "Scan barcode to report work - supports both work-order and operation barcodes")
     @PostMapping("/scan/report")
     public ApiResponse<WorkOrderDTO> scanReport(@RequestBody Map<String, String> body) {
         String barcode = body.get("barcode");
@@ -106,8 +119,19 @@ public class DeviceController {
             throw new BusinessException("barcode is required");
         }
         Long userId = securityUtils.getCurrentUserId();
-        WorkOrderDTO workOrder = workOrderService.getWorkOrderByBarcode(barcode, userId);
 
+        // Try operation barcode first
+        java.util.Optional<com.xiaobai.workorder.modules.operation.entity.Operation> byOpNumber = operationMapper.findByOperationNumber(barcode);
+        if (byOpNumber.isPresent()) {
+            com.xiaobai.workorder.modules.operation.entity.Operation op = byOpNumber.get();
+            ReportRequest req = new ReportRequest();
+            req.setOperationId(op.getId());
+            reportService.reportWork(req, userId, null);
+            return ApiResponse.success(workOrderService.getWorkOrderById(op.getWorkOrderId()));
+        }
+
+        // Fall back to work-order barcode
+        WorkOrderDTO workOrder = workOrderService.getWorkOrderByBarcode(barcode, userId);
         workOrder.getOperations().stream()
                 .filter(op -> "STARTED".equals(op.getStatus()) || "NOT_STARTED".equals(op.getStatus()))
                 .findFirst()
@@ -116,7 +140,6 @@ public class DeviceController {
                     req.setOperationId(op.getId());
                     reportService.reportWork(req, userId, null);
                 });
-
         return ApiResponse.success(workOrderService.getWorkOrderById(workOrder.getId()));
     }
 
@@ -150,6 +173,58 @@ public class DeviceController {
         Long userId = securityUtils.getCurrentUserId();
         CallRequest req = buildCallRequest(body, "TRANSPORT");
         return ApiResponse.success(callService.createCall(req, userId));
+    }
+
+    @Operation(summary = "Batch start multiple operations")
+    @PostMapping("/batch/start")
+    public ApiResponse<List<Map<String, Object>>> batchStartWork(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Number> ids = (List<Number>) body.get("operationIds");
+        if (ids == null || ids.isEmpty()) {
+            throw new BusinessException("operationIds is required");
+        }
+        Long userId = securityUtils.getCurrentUserId();
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (Number id : ids) {
+            Long opId = id.longValue();
+            try {
+                reportService.startWork(opId, userId);
+                results.add(Map.of("operationId", opId, "status", "OK"));
+            } catch (Exception e) {
+                results.add(Map.of("operationId", opId, "status", "ERROR", "message", e.getMessage()));
+            }
+        }
+        return ApiResponse.success(results);
+    }
+
+    @Operation(summary = "Batch report multiple operations")
+    @PostMapping("/batch/report")
+    public ApiResponse<List<Map<String, Object>>> batchReportWork(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Number> ids = (List<Number>) body.get("operationIds");
+        if (ids == null || ids.isEmpty()) {
+            throw new BusinessException("operationIds is required");
+        }
+        Long userId = securityUtils.getCurrentUserId();
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (Number id : ids) {
+            Long opId = id.longValue();
+            try {
+                ReportRequest req = new ReportRequest();
+                req.setOperationId(opId);
+                reportService.reportWork(req, userId, null);
+                results.add(Map.of("operationId", opId, "status", "OK"));
+            } catch (Exception e) {
+                results.add(Map.of("operationId", opId, "status", "ERROR", "message", e.getMessage()));
+            }
+        }
+        return ApiResponse.success(results);
+    }
+
+    @Operation(summary = "Get latest inspection result for a work order")
+    @GetMapping("/inspections/{workOrderId}")
+    public ApiResponse<InspectionRecord> getInspectionDetail(@PathVariable Long workOrderId) {
+        return ApiResponse.success(inspectionService.getLatestByWorkOrderId(workOrderId));
     }
 
     private CallRequest buildCallRequest(Map<String, Object> body, String callType) {

@@ -1,5 +1,6 @@
 package com.xiaobai.workorder.modules.workorder.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xiaobai.workorder.common.exception.BusinessException;
 import com.xiaobai.workorder.modules.operation.entity.Operation;
 import com.xiaobai.workorder.modules.operation.entity.OperationAssignment;
@@ -16,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -33,6 +35,7 @@ class WorkOrderServiceTest {
     @Mock WorkOrderMapper workOrderMapper;
     @Mock OperationMapper operationMapper;
     @Mock OperationAssignmentMapper assignmentMapper;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     @InjectMocks WorkOrderService workOrderService;
 
@@ -119,7 +122,7 @@ class WorkOrderServiceTest {
         // wo1 appears in both results - should be deduplicated
         when(workOrderMapper.findByDirectUserId(10L)).thenReturn(List.of(wo1));
         when(workOrderMapper.findByTeamMemberId(10L)).thenReturn(List.of(wo1, wo2));
-        when(operationMapper.findByWorkOrderId(anyLong())).thenReturn(List.of());
+        when(operationMapper.findByWorkOrderIds(any())).thenReturn(List.of());
 
         List<WorkOrderDTO> result = workOrderService.getAssignedWorkOrders(10L);
 
@@ -135,7 +138,7 @@ class WorkOrderServiceTest {
 
         when(workOrderMapper.findByDirectUserId(10L)).thenReturn(List.of(lowPriority, highPriority));
         when(workOrderMapper.findByTeamMemberId(10L)).thenReturn(List.of());
-        when(operationMapper.findByWorkOrderId(anyLong())).thenReturn(List.of());
+        when(operationMapper.findByWorkOrderIds(any())).thenReturn(List.of());
 
         List<WorkOrderDTO> result = workOrderService.getAssignedWorkOrders(10L);
 
@@ -189,6 +192,92 @@ class WorkOrderServiceTest {
         assertThatThrownBy(() -> workOrderService.assignWorkOrder(req))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Operation not found");
+    }
+
+    @Test
+    void should_filterByProductName_when_productNameProvided() {
+        WorkOrder matching = buildWorkOrder(1L, "NOT_STARTED");
+        matching.setProductName("轴承盖板");
+
+        Page<WorkOrder> page = new Page<>();
+        page.setRecords(List.of(matching));
+        when(workOrderMapper.selectPage(any(), any())).thenReturn(page);
+        when(operationMapper.findByWorkOrderIds(any())).thenReturn(List.of());
+
+        List<WorkOrderDTO> result = workOrderService.listAllWorkOrders(1, 20, null, "轴承");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getProductName()).isEqualTo("轴承盖板");
+    }
+
+    @Test
+    void should_returnAll_when_productNameIsNull() {
+        WorkOrder wo1 = buildWorkOrder(1L, "NOT_STARTED");
+        WorkOrder wo2 = buildWorkOrder(2L, "STARTED");
+
+        Page<WorkOrder> page = new Page<>();
+        page.setRecords(List.of(wo1, wo2));
+        when(workOrderMapper.selectPage(any(), any())).thenReturn(page);
+        when(operationMapper.findByWorkOrderIds(any())).thenReturn(List.of());
+
+        List<WorkOrderDTO> result = workOrderService.listAllWorkOrders(1, 20, null, null);
+
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void completeWorkOrder_inspectPassed_transitionsToCompleted() {
+        WorkOrder wo = buildWorkOrder(1L, "INSPECT_PASSED");
+        when(workOrderMapper.selectById(1L)).thenReturn(wo);
+
+        workOrderService.completeWorkOrder(1L);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(workOrderMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo("COMPLETED");
+        verify(eventPublisher).publishEvent(any());
+    }
+
+    @Test
+    void completeWorkOrder_wrongStatus_throwsBusinessException() {
+        WorkOrder wo = buildWorkOrder(1L, "REPORTED");
+        when(workOrderMapper.selectById(1L)).thenReturn(wo);
+
+        assertThatThrownBy(() -> workOrderService.completeWorkOrder(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("INSPECT_PASSED");
+    }
+
+    @Test
+    void completeWorkOrder_notFound_throwsBusinessException() {
+        when(workOrderMapper.selectById(99L)).thenReturn(null);
+
+        assertThatThrownBy(() -> workOrderService.completeWorkOrder(99L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Work order not found");
+    }
+
+    @Test
+    void reopenWorkOrder_inspectFailed_transitionsToReported() {
+        WorkOrder wo = buildWorkOrder(1L, "INSPECT_FAILED");
+        when(workOrderMapper.selectById(1L)).thenReturn(wo);
+
+        workOrderService.reopenWorkOrder(1L);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(workOrderMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo("REPORTED");
+        verify(eventPublisher).publishEvent(any());
+    }
+
+    @Test
+    void reopenWorkOrder_wrongStatus_throwsBusinessException() {
+        WorkOrder wo = buildWorkOrder(1L, "INSPECT_PASSED");
+        when(workOrderMapper.selectById(1L)).thenReturn(wo);
+
+        assertThatThrownBy(() -> workOrderService.reopenWorkOrder(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("INSPECT_FAILED");
     }
 
     // ---------------------------------------------------------------

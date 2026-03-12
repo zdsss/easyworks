@@ -283,8 +283,4 @@ CREATE INDEX idx_mes_order_mappings_sync_status ON mes_order_mappings(sync_statu
 
 -- Insert default admin user (password: admin123)
 INSERT INTO users (employee_number, username, password, real_name, role, status)
-VALUES ('ADMIN001', 'admin', '$2b$10$sowX6FBE/loSX0iUJ7pbb.Qmq7eX78zD0k3iRBJ3t7s75PBJG3Jeu', 'System Admin', 'ADMIN', 'ACTIVE');
-
--- Insert default worker user (password: worker123)
-INSERT INTO users (employee_number, username, password, real_name, role, status)
-VALUES ('WORKER001', 'worker001', '$2b$10$YOmnwSxapCCvTPI2j743WOyHKDe0tsy7rizpS3haxotD9zv12dCQu', '张工', 'WORKER', 'ACTIVE');
+VALUES ('ADMIN001', 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'System Admin', 'ADMIN', 'ACTIVE');

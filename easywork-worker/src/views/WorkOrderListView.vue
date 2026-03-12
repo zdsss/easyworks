@@ -72,7 +72,7 @@ const loading = ref(false)
 const refreshing = ref(false)
 const finished = ref(false)
 const list = ref([])
-let current = 1
+let allOrders = []
 const pageSize = 10
 
 const statusMap = {
@@ -96,28 +96,33 @@ function formatDate(val) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-async function fetchData(page) {
-  try {
-    // API returns array directly (no pagination)
-    const data = await getWorkOrders()
-    const records = Array.isArray(data) ? data : []
-    list.value = records
-    finished.value = true  // All records returned at once
-  } catch {
-    // handled
-  }
-}
-
 async function onLoad() {
-  loading.value = true
-  await fetchData(current)
+  if (allOrders.length === 0 && !finished.value) {
+    // First call: fetch all assigned work orders from server
+    try {
+      const data = await getWorkOrders()
+      allOrders = Array.isArray(data) ? data : []
+    } catch {
+      // handled in interceptor
+    }
+  }
+
+  // Slice the next page from the in-memory list
+  const start = list.value.length
+  const nextPage = allOrders.slice(start, start + pageSize)
+  list.value = [...list.value, ...nextPage]
+
+  if (list.value.length >= allOrders.length) {
+    finished.value = true
+  }
   loading.value = false
 }
 
 async function onRefresh() {
-  current = 1
+  allOrders = []
+  list.value = []
   finished.value = false
-  await fetchData(1)
+  await onLoad()
   refreshing.value = false
 }
 

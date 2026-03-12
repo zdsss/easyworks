@@ -1,10 +1,7 @@
 package com.xiaobai.workorder.modules.statistics.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xiaobai.workorder.modules.statistics.dto.StatisticsDTO;
-import com.xiaobai.workorder.modules.workorder.entity.WorkOrder;
 import com.xiaobai.workorder.modules.workorder.repository.WorkOrderMapper;
-import com.xiaobai.workorder.modules.report.entity.ReportRecord;
 import com.xiaobai.workorder.modules.report.repository.ReportRecordMapper;
 import com.xiaobai.workorder.modules.user.entity.User;
 import com.xiaobai.workorder.modules.user.repository.UserMapper;
@@ -14,9 +11,9 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,69 +24,79 @@ public class StatisticsService {
     private final UserMapper userMapper;
 
     public StatisticsDTO getDashboardStats() {
-        List<WorkOrder> allOrders = workOrderMapper.selectList(
-                new LambdaQueryWrapper<WorkOrder>().eq(WorkOrder::getDeleted, 0));
+        // SQL aggregation: one query for counts by status (no full table load)
+        List<Map<String, Object>> statusCounts = workOrderMapper.countByStatus();
+
+        Map<String, Long> byStatus = new HashMap<>();
+        long total = 0;
+        for (Map<String, Object> row : statusCounts) {
+            String status = (String) row.get("status");
+            long cnt = ((Number) row.get("cnt")).longValue();
+            byStatus.put(status, cnt);
+            total += cnt;
+        }
 
         StatisticsDTO stats = new StatisticsDTO();
-        stats.setTotalWorkOrders((long) allOrders.size());
-        stats.setNotStartedCount(allOrders.stream()
-                .filter(o -> "NOT_STARTED".equals(o.getStatus())).count());
-        stats.setStartedCount(allOrders.stream()
-                .filter(o -> "STARTED".equals(o.getStatus())).count());
-        stats.setReportedCount(allOrders.stream()
-                .filter(o -> "REPORTED".equals(o.getStatus())).count());
-        stats.setCompletedCount(allOrders.stream()
-                .filter(o -> "INSPECT_PASSED".equals(o.getStatus())
-                        || "COMPLETED".equals(o.getStatus())).count());
+        stats.setTotalWorkOrders(total);
+        stats.setNotStartedCount(byStatus.getOrDefault("NOT_STARTED", 0L));
+        stats.setStartedCount(byStatus.getOrDefault("STARTED", 0L));
+        stats.setReportedCount(byStatus.getOrDefault("REPORTED", 0L));
+        stats.setCompletedCount(byStatus.getOrDefault("INSPECT_PASSED", 0L)
+                + byStatus.getOrDefault("COMPLETED", 0L));
 
-        if (!allOrders.isEmpty()) {
+        if (total > 0) {
             long done = stats.getReportedCount() + stats.getCompletedCount();
             stats.setOverallCompletionRate(
                     BigDecimal.valueOf(done * 100L)
-                            .divide(BigDecimal.valueOf(allOrders.size()), 1, RoundingMode.HALF_UP));
+                            .divide(BigDecimal.valueOf(total), 1, RoundingMode.HALF_UP));
         } else {
             stats.setOverallCompletionRate(BigDecimal.ZERO);
         }
 
-        // Type stats
-        Map<String, List<WorkOrder>> byType = allOrders.stream()
-                .collect(Collectors.groupingBy(WorkOrder::getOrderType));
-        List<StatisticsDTO.WorkOrderTypeStat> typeStats = new ArrayList<>();
-        byType.forEach((type, orders) -> {
-            StatisticsDTO.WorkOrderTypeStat ts = new StatisticsDTO.WorkOrderTypeStat();
-            ts.setOrderType(type);
-            ts.setCount((long) orders.size());
-            ts.setCompletedCount(orders.stream()
-                    .filter(o -> "REPORTED".equals(o.getStatus())
-                            || "INSPECT_PASSED".equals(o.getStatus())
-                            || "COMPLETED".equals(o.getStatus())).count());
-            typeStats.add(ts);
-        });
-        stats.setTypeStats(typeStats);
+        // Type stats via SQL aggregation
+        List<Map<String, Object>> typeRows = workOrderMapper.countByTypeAndStatus();
+        Map<String, StatisticsDTO.WorkOrderTypeStat> typeMap = new HashMap<>();
+        for (Map<String, Object> row : typeRows) {
+            String type = (String) row.get("order_type");
+            String status = (String) row.get("status");
+            long cnt = ((Number) row.get("cnt")).longValue();
 
-        // Worker stats
-        List<ReportRecord> allReports = reportRecordMapper.selectList(
-                new LambdaQueryWrapper<ReportRecord>()
-                        .eq(ReportRecord::getIsUndone, false)
-                        .eq(ReportRecord::getDeleted, 0));
+            StatisticsDTO.WorkOrderTypeStat ts = typeMap.computeIfAbsent(type, k -> {
+                StatisticsDTO.WorkOrderTypeStat s = new StatisticsDTO.WorkOrderTypeStat();
+                s.setOrderType(k);
+                s.setCount(0L);
+                s.setCompletedCount(0L);
+                return s;
+            });
+            ts.setCount(ts.getCount() + cnt);
+            if ("REPORTED".equals(status) || "INSPECT_PASSED".equals(status) || "COMPLETED".equals(status)) {
+                ts.setCompletedCount(ts.getCompletedCount() + cnt);
+            }
+        }
+        stats.setTypeStats(new ArrayList<>(typeMap.values()));
 
-        Map<Long, List<ReportRecord>> byUser = allReports.stream()
-                .collect(Collectors.groupingBy(ReportRecord::getUserId));
+        // Worker stats via SQL aggregation
+        List<Map<String, Object>> workerRows = reportRecordMapper.sumByUser();
         List<StatisticsDTO.WorkerStat> workerStats = new ArrayList<>();
-        byUser.forEach((userId, reports) -> {
+        for (Map<String, Object> row : workerRows) {
+            // MyBatis with map-underscore-to-camel-case converts user_id → userId
+            Object userIdObj = row.getOrDefault("userId", row.get("user_id"));
+            if (userIdObj == null) continue;
+            Long userId = ((Number) userIdObj).longValue();
             User user = userMapper.selectById(userId);
             if (user != null) {
                 StatisticsDTO.WorkerStat ws = new StatisticsDTO.WorkerStat();
                 ws.setUserId(userId);
                 ws.setRealName(user.getRealName());
                 ws.setEmployeeNumber(user.getEmployeeNumber());
-                ws.setReportCount((long) reports.size());
-                ws.setTotalReported(reports.stream()
-                        .map(ReportRecord::getReportedQuantity)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add));
+                Object reportCountObj = row.getOrDefault("reportCount", row.get("report_count"));
+                ws.setReportCount(reportCountObj != null ? ((Number) reportCountObj).longValue() : 0L);
+                Object totalObj = row.getOrDefault("totalReported", row.get("total_reported"));
+                ws.setTotalReported(totalObj instanceof BigDecimal bd ? bd
+                        : totalObj != null ? new BigDecimal(totalObj.toString()) : BigDecimal.ZERO);
                 workerStats.add(ws);
             }
-        });
+        }
         stats.setWorkerStats(workerStats);
 
         return stats;

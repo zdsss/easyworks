@@ -19,6 +19,24 @@ public interface OperationMapper extends BaseMapper<Operation> {
                 .orderByAsc(Operation::getSequenceNumber));
     }
 
+    default List<Operation> findByWorkOrderIds(java.util.Collection<Long> workOrderIds) {
+        if (workOrderIds == null || workOrderIds.isEmpty()) return java.util.List.of();
+        return selectList(new LambdaQueryWrapper<Operation>()
+                .in(Operation::getWorkOrderId, workOrderIds)
+                .eq(Operation::getDeleted, 0)
+                .orderByAsc(Operation::getSequenceNumber));
+    }
+
+    @Select("SELECT * FROM operations WHERE id = #{id} AND deleted = 0 FOR UPDATE")
+    Operation selectByIdForUpdate(@Param("id") Long id);
+
+    default java.util.Optional<Operation> findByOperationNumber(String operationNumber) {
+        return java.util.Optional.ofNullable(
+                selectOne(new LambdaQueryWrapper<Operation>()
+                        .eq(Operation::getOperationNumber, operationNumber)
+                        .eq(Operation::getDeleted, 0)));
+    }
+
     @Select("""
         SELECT op.* FROM operations op
         JOIN operation_assignments oa ON oa.operation_id = op.id AND oa.deleted = 0

@@ -92,7 +92,7 @@ class ReportServiceTest {
     void reportWork_normalReport_insertsRecordAndUpdatesOperation() {
         Operation op = buildOperation(1L, 1L, "STARTED", BigDecimal.TEN);
         WorkOrder wo = buildWorkOrder(1L, "STARTED");
-        when(operationMapper.selectById(1L)).thenReturn(op);
+        when(operationMapper.selectByIdForUpdate(1L)).thenReturn(op);
         when(reportRecordMapper.sumReportedQuantityByOperationId(1L)).thenReturn(BigDecimal.ZERO);
         when(workOrderMapper.selectById(1L)).thenReturn(wo);
         when(operationMapper.findByWorkOrderId(1L)).thenReturn(List.of(op));
@@ -112,7 +112,7 @@ class ReportServiceTest {
     void reportWork_nullQuantity_usesRemainingQuantity() {
         Operation op = buildOperation(1L, 1L, "STARTED", BigDecimal.TEN);
         WorkOrder wo = buildWorkOrder(1L, "STARTED");
-        when(operationMapper.selectById(1L)).thenReturn(op);
+        when(operationMapper.selectByIdForUpdate(1L)).thenReturn(op);
         when(reportRecordMapper.sumReportedQuantityByOperationId(1L)).thenReturn(new BigDecimal("3"));
         when(workOrderMapper.selectById(1L)).thenReturn(wo);
         when(operationMapper.findByWorkOrderId(1L)).thenReturn(List.of(op));
@@ -130,7 +130,7 @@ class ReportServiceTest {
     @Test
     void reportWork_exceedsRemaining_throwsBusinessException() {
         Operation op = buildOperation(1L, 1L, "STARTED", BigDecimal.TEN);
-        when(operationMapper.selectById(1L)).thenReturn(op);
+        when(operationMapper.selectByIdForUpdate(1L)).thenReturn(op);
         when(reportRecordMapper.sumReportedQuantityByOperationId(1L)).thenReturn(new BigDecimal("8"));
 
         ReportRequest req = new ReportRequest();
@@ -145,7 +145,7 @@ class ReportServiceTest {
     @Test
     void reportWork_zeroQuantity_throwsBusinessException() {
         Operation op = buildOperation(1L, 1L, "STARTED", BigDecimal.TEN);
-        when(operationMapper.selectById(1L)).thenReturn(op);
+        when(operationMapper.selectByIdForUpdate(1L)).thenReturn(op);
         when(reportRecordMapper.sumReportedQuantityByOperationId(1L)).thenReturn(BigDecimal.TEN);
 
         ReportRequest req = new ReportRequest();
@@ -162,7 +162,7 @@ class ReportServiceTest {
         Operation op = buildOperation(1L, 1L, "STARTED", BigDecimal.TEN);
         WorkOrder wo = buildWorkOrder(1L, "STARTED");
         wo.setOrderType("PRODUCTION");
-        when(operationMapper.selectById(1L)).thenReturn(op);
+        when(operationMapper.selectByIdForUpdate(1L)).thenReturn(op);
         when(reportRecordMapper.sumReportedQuantityByOperationId(1L)).thenReturn(new BigDecimal("5"));
         when(workOrderMapper.selectById(1L)).thenReturn(wo);
 
@@ -186,7 +186,7 @@ class ReportServiceTest {
         Operation op = buildOperation(1L, 1L, "STARTED", BigDecimal.TEN);
         WorkOrder wo = buildWorkOrder(1L, "STARTED");
         wo.setOrderType("PRODUCTION");
-        when(operationMapper.selectById(1L)).thenReturn(op);
+        when(operationMapper.selectByIdForUpdate(1L)).thenReturn(op);
         when(reportRecordMapper.sumReportedQuantityByOperationId(1L)).thenReturn(BigDecimal.ZERO);
         when(workOrderMapper.selectById(1L)).thenReturn(wo);
 
@@ -207,7 +207,7 @@ class ReportServiceTest {
     void reportWork_publishesReportRecordSavedEvent() {
         Operation op = buildOperation(1L, 1L, "STARTED", BigDecimal.TEN);
         WorkOrder wo = buildWorkOrder(1L, "STARTED");
-        when(operationMapper.selectById(1L)).thenReturn(op);
+        when(operationMapper.selectByIdForUpdate(1L)).thenReturn(op);
         when(reportRecordMapper.sumReportedQuantityByOperationId(1L)).thenReturn(BigDecimal.ZERO);
         when(workOrderMapper.selectById(1L)).thenReturn(wo);
         when(operationMapper.findByWorkOrderId(1L)).thenReturn(List.of(op));
