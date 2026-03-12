@@ -77,7 +77,7 @@ public class UserService {
 
     @Transactional
     public void deleteUser(Long userId) {
-        User user = findById(userId);  // throws if not found
+        User user = findById(userId);  // guard: throws BusinessException if not found or already deleted
         userMapper.deleteById(userId);  // MyBatis-Plus @TableLogic handles soft delete
     }
 

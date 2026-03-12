@@ -39,7 +39,7 @@ public class AdminUserController {
     @PutMapping("/{id}")
     public ApiResponse<UserDTO> updateUser(
             @PathVariable Long id,
-            @RequestBody UpdateUserRequest request) {
+            @Valid @RequestBody UpdateUserRequest request) {
         return ApiResponse.success(userService.updateUser(id, request));
     }
 
