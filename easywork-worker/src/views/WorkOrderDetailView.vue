@@ -74,6 +74,12 @@
           </van-button>
         </div>
       </div>
+      <!-- 呼叫按鈕 -->
+      <div class="call-section">
+        <van-button round block type="warning" icon="phone-o" @click="goToCall">
+          发起呼叫
+        </van-button>
+      </div>
     </div>
 
     <van-loading v-else-if="loading" vertical style="padding-top: 40%">加载中...</van-loading>
@@ -132,12 +138,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { getWorkOrders } from '@/api/workorder'
 import { startWork, reportWork, undoReport } from '@/api/report'
 
 const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const workorder = ref(null)
 const actionLoading = reactive({})
@@ -175,6 +182,10 @@ async function loadWorkOrder() {
   }
 }
 
+
+function goToCall() {
+  router.push({ name: 'Call', query: { workOrderId: workorder.value?.id } })
+}
 async function handleStart(op) {
   actionLoading[op.id] = true
   try {
@@ -302,5 +313,8 @@ onMounted(loadWorkOrder)
 .op-actions {
   display: flex;
   gap: 8px;
+}
+.call-section {
+  margin: 16px 12px 24px;
 }
 </style>

@@ -1,10 +1,6 @@
 <template>
   <div class="page">
-    <van-nav-bar title="呼叫" fixed>
-      <template #left>
-        <van-icon name="arrow-left" @click="$router.back()" />
-      </template>
-    </van-nav-bar>
+    <van-nav-bar title="呼叫" fixed />
 
     <div class="content">
       <van-cell-group inset title="呼叫类型" style="margin-top: 12px">
@@ -58,18 +54,21 @@
       </div>
     </div>
 
-    <van-tabbar>
+    <van-tabbar route>
       <van-tabbar-item icon="orders-o" to="/workorders">工单</van-tabbar-item>
+      <van-tabbar-item icon="scan" to="/scan">扫码</van-tabbar-item>
       <van-tabbar-item icon="phone-o" to="/call">呼叫</van-tabbar-item>
     </van-tabbar>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import { callAndon, callInspection, callTransport } from '@/api/call'
 
+const route = useRoute()
 const submitting = ref(false)
 
 const callTypes = [
@@ -80,7 +79,7 @@ const callTypes = [
 
 const form = reactive({
   callType: 'andon',
-  workOrderId: '',
+  workOrderId: route.query.workOrderId ? String(Number(route.query.workOrderId)) : '',
   description: '',
 })
 

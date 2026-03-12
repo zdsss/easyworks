@@ -54,8 +54,9 @@
       </van-pull-refresh>
     </div>
 
-    <van-tabbar>
+    <van-tabbar route>
       <van-tabbar-item icon="orders-o" to="/workorders">工单</van-tabbar-item>
+      <van-tabbar-item icon="scan" to="/scan">扫码</van-tabbar-item>
       <van-tabbar-item icon="phone-o" to="/call">呼叫</van-tabbar-item>
     </van-tabbar>
   </div>
