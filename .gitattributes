@@ -1,0 +1,15 @@
+# Default: auto-detect text files, normalize to LF in repo
+* text=auto eol=lf
+
+# Windows batch files must use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files — no EOL conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.class binary

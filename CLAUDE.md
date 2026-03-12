@@ -7,10 +7,10 @@
 ## 仓库结构
 
 ```
-D:\Program\tools\
-├── easywork\          ← 后端 Spring Boot（主仓库）
-├── easywork-admin\    ← 管理端前端 Vue3（待创建）
-└── easywork-worker\   ← 工人端前端 Vue3（待创建）
+easyworks/
+├── easywork/          ← 后端 Spring Boot（主仓库）
+├── easywork-admin/    ← 管理端前端 Vue3
+└── easywork-worker/   ← 工人端前端 Vue3
 ```
 
 ---
