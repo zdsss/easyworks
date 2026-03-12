@@ -63,10 +63,12 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import { callAndon, callInspection, callTransport } from '@/api/call'
 
+const route = useRoute()
 const submitting = ref(false)
 
 const callTypes = [
@@ -77,7 +79,7 @@ const callTypes = [
 
 const form = reactive({
   callType: 'andon',
-  workOrderId: '',
+  workOrderId: route.query.workOrderId ? String(Number(route.query.workOrderId)) : '',
   description: '',
 })
 
