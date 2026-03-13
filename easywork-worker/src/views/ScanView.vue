@@ -41,7 +41,8 @@
       <van-cell-group v-if="result" inset>
         <van-cell title="工单号" :value="result.orderNumber" />
         <van-cell title="产品" :value="result.productName" />
-        <van-cell title="状态" :value="statusLabel(result.status)" />
+        <van-cell title="当前工序" :value="`${result.processNumber || '-'} - ${result.processName || '-'}`" />
+        <van-cell title="工序状态" :value="statusLabel(result.status)" />
         <van-cell title="完成数量" :value="`${result.completedQuantity} / ${result.plannedQuantity}`" />
       </van-cell-group>
     </div>
@@ -56,8 +57,11 @@
 
 <script setup>
 import { ref } from 'vue'
-import { showSuccessToast } from 'vant'
+import { showSuccessToast, showFailToast } from 'vant'
 import { scanStart, scanReport } from '@/api/scan'
+import { useScanStore } from '@/stores/scan'
+
+const scanStore = useScanStore()
 
 const barcode = ref('')
 const startLoading = ref(false)
@@ -76,15 +80,29 @@ const statusLabel = (status) => {
   return map[status] || status
 }
 
+function playFeedback(success) {
+  if (success) {
+    if ('vibrate' in navigator) navigator.vibrate(200)
+    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGi77eeeTRAMUKfj8LZjHAY4ktfyzHksBSR3x/DdkEAKFF606+uoVRQKRp/g8r5sIQUrgs7y2Ik2CBhpvO3nnk0QDFA=')
+    audio.play().catch(() => {})
+  } else {
+    if ('vibrate' in navigator) navigator.vibrate([100, 50, 100])
+  }
+}
+
 const handleScanStart = async () => {
   if (!barcode.value) return
   startLoading.value = true
   result.value = null
+  scanStore.setScanning()
   try {
     result.value = await scanStart(barcode.value.trim())
+    scanStore.setSuccess()
+    playFeedback(true)
     showSuccessToast('开工成功')
   } catch (e) {
-    // error shown by http interceptor
+    scanStore.setError()
+    playFeedback(false)
   } finally {
     startLoading.value = false
   }
@@ -94,11 +112,15 @@ const handleScanReport = async () => {
   if (!barcode.value) return
   reportLoading.value = true
   result.value = null
+  scanStore.setScanning()
   try {
     result.value = await scanReport(barcode.value.trim())
+    scanStore.setSuccess()
+    playFeedback(true)
     showSuccessToast('报工成功')
   } catch (e) {
-    // error shown by http interceptor
+    scanStore.setError()
+    playFeedback(false)
   } finally {
     reportLoading.value = false
   }

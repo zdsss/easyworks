@@ -2,11 +2,17 @@
   <div class="page">
     <van-nav-bar title="我的工单" fixed>
       <template #right>
-        <van-icon name="phone-o" size="20" @click="$router.push('/call')" />
+        <van-button v-if="!batchMode" size="small" type="primary" @click="batchMode = true">批量</van-button>
+        <van-button v-else size="small" @click="exitBatchMode">取消</van-button>
       </template>
     </van-nav-bar>
 
     <div class="content">
+      <div v-if="batchMode" class="batch-toolbar">
+        <van-button size="small" @click="toggleSelectAll">{{ allSelected ? '取消全选' : '全选' }}</van-button>
+        <van-button size="small" type="primary" :disabled="selectedCount === 0" @click="batchStart">批量开工</van-button>
+        <van-button size="small" type="success" :disabled="selectedCount === 0" @click="batchReport">批量报工</van-button>
+      </div>
       <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
         <van-list
           v-model:loading="loading"
@@ -18,8 +24,9 @@
             v-for="order in list"
             :key="order.id"
             class="order-card"
-            @click="goDetail(order.id)"
+            @click="handleCardClick(order)"
           >
+            <van-checkbox v-if="batchMode" v-model="order.checked" @click.stop />
             <div class="card-header">
               <span class="order-number">{{ order.orderNumber }}</span>
               <van-tag :type="statusTagType(order.status)">{{ statusLabel(order.status) }}</van-tag>
@@ -63,17 +70,81 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getWorkOrders } from '@/api/workorder'
+import { showToast, showConfirmDialog } from 'vant'
+import http from '@/api/http'
 
 const router = useRouter()
 const loading = ref(false)
 const refreshing = ref(false)
 const finished = ref(false)
 const list = ref([])
+const batchMode = ref(false)
 let allOrders = []
 const pageSize = 10
+
+const selectedCount = computed(() => list.value.filter(o => o.checked).length)
+const allSelected = computed(() => list.value.length > 0 && list.value.every(o => o.checked))
+
+function toggleSelectAll() {
+  const newValue = !allSelected.value
+  list.value.forEach(o => o.checked = newValue)
+}
+
+function exitBatchMode() {
+  batchMode.value = false
+  list.value.forEach(o => o.checked = false)
+}
+
+function handleCardClick(order) {
+  if (batchMode.value) {
+    order.checked = !order.checked
+  } else {
+    goDetail(order.id)
+  }
+}
+
+async function batchStart() {
+  const selected = list.value.filter(o => o.checked)
+  const operationIds = selected.flatMap(o =>
+    (o.operations || []).filter(op => op.status === 'NOT_STARTED').map(op => op.id)
+  )
+
+  if (operationIds.length === 0) {
+    showToast('没有可开工的工序')
+    return
+  }
+
+  try {
+    await showConfirmDialog({ title: '确认批量开工', message: `将开工 ${operationIds.length} 个工序` })
+    await http.post('/device/batch/start', { operationIds })
+    showToast('批量开工成功')
+    exitBatchMode()
+    onRefresh()
+  } catch {}
+}
+
+async function batchReport() {
+  const selected = list.value.filter(o => o.checked)
+  const operationIds = selected.flatMap(o =>
+    (o.operations || []).filter(op => op.status === 'STARTED').map(op => op.id)
+  )
+
+  if (operationIds.length === 0) {
+    showToast('没有可报工的工序')
+    return
+  }
+
+  try {
+    await showConfirmDialog({ title: '确认批量报工', message: `将报工 ${operationIds.length} 个工序` })
+    await http.post('/device/batch/report', { operationIds })
+    showToast('批量报工成功')
+    exitBatchMode()
+    onRefresh()
+  } catch {}
+}
 
 const statusMap = {
   NOT_STARTED: { label: '未开始', type: 'default' },
@@ -98,16 +169,12 @@ function formatDate(val) {
 
 async function onLoad() {
   if (allOrders.length === 0 && !finished.value) {
-    // First call: fetch all assigned work orders from server
     try {
       const data = await getWorkOrders()
-      allOrders = Array.isArray(data) ? data : []
-    } catch {
-      // handled in interceptor
-    }
+      allOrders = (Array.isArray(data) ? data : []).map(o => ({ ...o, checked: false }))
+    } catch {}
   }
 
-  // Slice the next page from the in-memory list
   const start = list.value.length
   const nextPage = allOrders.slice(start, start + pageSize)
   list.value = [...list.value, ...nextPage]
@@ -179,5 +246,27 @@ function goDetail(id) {
 
 .label {
   color: #999;
+}
+
+.batch-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+.order-card {
+  position: relative;
+}
+
+.order-card .van-checkbox {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+}
+
+.order-card.batch-mode {
+  padding-left: 48px;
 }
 </style>

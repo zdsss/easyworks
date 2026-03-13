@@ -36,6 +36,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/test',
+    name: 'Test',
+    component: () => import('@/views/TestView.vue'),
+    meta: { requiresAuth: false },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/workorders',
   },

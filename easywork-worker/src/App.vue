@@ -1,8 +1,10 @@
 <template>
+  <StatusBar />
   <router-view />
 </template>
 
 <script setup>
+import StatusBar from '@/components/StatusBar.vue'
 </script>
 
 <style>
