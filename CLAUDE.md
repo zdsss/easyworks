@@ -129,6 +129,7 @@ NOT_STARTED → STARTED → REPORTED → INSPECT_PASSED / INSPECT_FAILED → COM
 |------|------|
 | Java 21 | `D:/Software/Java21` |
 | Maven 3.9.13 | `D:/Software/apache-maven-3.9.13/bin/mvn` |
+| Docker | `C:/Program Files/Docker/Docker/resources/bin/docker.exe` |
 
 **标准测试命令（在 `easywork/` 目录下执行）：**
 
@@ -140,6 +141,22 @@ JAVA_HOME="D:/Software/Java21" "D:/Software/apache-maven-3.9.13/bin/mvn" test
 
 ```bash
 JAVA_HOME="D:/Software/Java21" "D:/Software/apache-maven-3.9.13/bin/mvn" spring-boot:run
+```
+
+**Docker 启动数据库（在 `easywork/` 目录下执行）：**
+
+```bash
+"/c/Program Files/Docker/Docker/resources/bin/docker.exe" compose up -d postgres redis
+```
+
+**Docker 常用命令：**
+
+```bash
+# 查看运行中容器
+"/c/Program Files/Docker/Docker/resources/bin/docker.exe" ps
+
+# 停止数据库
+"/c/Program Files/Docker/Docker/resources/bin/docker.exe" compose down
 ```
 
 ### macOS
