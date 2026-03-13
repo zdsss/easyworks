@@ -60,8 +60,54 @@
             <el-button type="primary" link size="small" @click="openAssignForOp(row)">派工</el-button>
           </template>
         </el-table-column>
+        <el-table-column label="依赖" width="100">
+          <template #default="{ row }">
+            <el-button type="info" link size="small" @click="openDepDialog(row)">配置依赖</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- Dependency Dialog -->
+    <el-dialog v-model="depVisible" title="配置工序依赖" width="600px">
+      <div v-if="deps.length > 0" style="margin-bottom: 16px">
+        <div style="font-weight: 600; margin-bottom: 8px">当前依赖</div>
+        <el-table :data="deps" size="small" stripe>
+          <el-table-column prop="predecessorId" label="前置工序ID" width="120" />
+          <el-table-column prop="type" label="依赖类型" width="120" />
+          <el-table-column prop="condition" label="条件表达式" />
+        </el-table>
+      </div>
+      <div v-else style="color: #999; margin-bottom: 16px">暂无依赖配置</div>
+
+      <el-divider>添加依赖</el-divider>
+      <el-form :model="depForm" label-width="100px">
+        <el-form-item label="前置工序">
+          <el-select v-model="depForm.predecessorId" placeholder="选择前置工序" style="width: 100%">
+            <el-option
+              v-for="op in workorder?.operations"
+              :key="op.id"
+              :label="op.operationName"
+              :value="op.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="依赖类型">
+          <el-radio-group v-model="depForm.type">
+            <el-radio value="SERIAL">串行(SERIAL)</el-radio>
+            <el-radio value="PARALLEL">并行(PARALLEL)</el-radio>
+            <el-radio value="CONDITIONAL">条件(CONDITIONAL)</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="depForm.type === 'CONDITIONAL'" label="条件表达式">
+          <el-input v-model="depForm.condition" placeholder="如: qty > 100" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="depVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="addingDep" @click="handleAddDep">添加依赖</el-button>
+      </template>
+    </el-dialog>
 
     <!-- Assign Dialog -->
     <el-dialog v-model="assignVisible" title="派工" width="500px">
@@ -114,6 +160,7 @@ import { ElMessage } from 'element-plus'
 import { getWorkOrder, assignWorkOrder, completeWorkOrder, reopenWorkOrder } from '@/api/workorder'
 import { getUsers } from '@/api/user'
 import { getTeams } from '@/api/team'
+import { getDependencies, addDependency } from '@/api/dependency'
 
 const route = useRoute()
 const loading = ref(false)
@@ -131,6 +178,12 @@ const assignForm = reactive({
   userIds: [],
   teamIds: [],
 })
+
+const depVisible = ref(false)
+const activeDepOp = ref(null)
+const deps = ref([])
+const addingDep = ref(false)
+const depForm = reactive({ predecessorId: null, type: 'SERIAL', condition: '' })
 
 const statusOptions = [
   { value: 'NOT_STARTED', label: '未开始', type: 'info' },
@@ -227,6 +280,44 @@ async function handleReopen() {
     // handled in interceptor
   } finally {
     reopening.value = false
+  }
+}
+
+async function openDepDialog(op) {
+  activeDepOp.value = op
+  Object.assign(depForm, { predecessorId: null, type: 'SERIAL', condition: '' })
+  deps.value = []
+  depVisible.value = true
+  try {
+    deps.value = (await getDependencies(op.id)) ?? []
+  } catch {
+    // handled
+  }
+}
+
+async function handleAddDep() {
+  if (!depForm.predecessorId) {
+    ElMessage.warning('请选择前置工序')
+    return
+  }
+  addingDep.value = true
+  try {
+    const params = {
+      operationId: activeDepOp.value.id,
+      predecessorId: depForm.predecessorId,
+      type: depForm.type,
+    }
+    if (depForm.type === 'CONDITIONAL' && depForm.condition) {
+      params.condition = depForm.condition
+    }
+    await addDependency(params)
+    ElMessage.success('依赖添加成功')
+    deps.value = (await getDependencies(activeDepOp.value.id)) ?? []
+    Object.assign(depForm, { predecessorId: null, type: 'SERIAL', condition: '' })
+  } catch {
+    // handled
+  } finally {
+    addingDep.value = false
   }
 }
 
