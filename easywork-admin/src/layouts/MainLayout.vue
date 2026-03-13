@@ -39,6 +39,10 @@
           <el-icon><Connection /></el-icon>
           <span>MES 集成</span>
         </el-menu-item>
+        <el-menu-item index="/audit-logs">
+          <el-icon><List /></el-icon>
+          <span>审计日志</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -64,6 +68,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { DataLine, Document, User, UserFilled, CircleCheck, Bell, Connection, List } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -82,6 +87,7 @@ const pageTitleMap = {
   '/inspection': '质检管理',
   '/calls': '呼叫管理',
   '/mes': 'MES 集成',
+  '/audit-logs': '审计日志',
 }
 
 const pageTitle = computed(() => {
