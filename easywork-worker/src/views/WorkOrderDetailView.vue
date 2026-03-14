@@ -148,6 +148,8 @@
 
     <van-loading v-else-if="loading" vertical style="padding-top: 40%">加载中...</van-loading>
 
+    <KeyHints :hints="detailHints" />
+
     <!-- 报工弹窗 -->
     <van-dialog
       v-model:show="reportVisible"
@@ -286,7 +288,9 @@ import { startWork, reportWork, undoReport } from '@/api/report'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { enqueue, processQueue } from '@/utils/offlineQueue'
 import { getStatusLabel, getStatusTagType } from '@/utils/statusLabel'
-import { usePhysicalKeys } from '@/composables/usePhysicalKeys'
+import { useHardwareInput } from '@/composables/useHardwareInput'
+import { scanStart, scanReport } from '@/api/scan'
+import KeyHints from '@/components/KeyHints.vue'
 import http from '@/api/http'
 
 const route = useRoute()
@@ -332,12 +336,54 @@ function getReportLabel(orderType) {
   return '报工'
 }
 
-// Physical key: Enter triggers primary action (Task 1)
-usePhysicalKeys({
-  onKeyPress(key) {
-    if (key !== 'ENTER' || !workorder.value) return
-    // If any dialog is open, do not interfere
-    if (reportVisible.value || undoVisible.value || reworkVisible.value || inspectVisible.value) return
+// Computed shortcuts for KeyHints display
+const detailHints = computed(() => {
+  if (!workorder.value) return []
+  const ops = workorder.value.operations || []
+  const hints = []
+  if (ops.some(op => op.status === 'NOT_STARTED')) hints.push({ key: '1', label: '开工' })
+  if (ops.some(op => op.status === 'STARTED' && workorder.value.orderType !== 'INSPECTION')) hints.push({ key: '2', label: '报工' })
+  if (ops.some(op => op.status === 'STARTED' && workorder.value.orderType === 'INSPECTION')
+    || (workorder.value.orderType === 'PRODUCTION' && workorder.value.status === 'REPORTED')) {
+    hints.push({ key: '3', label: '质检' })
+  }
+  if (ops.some(op => op.status === 'REPORTED')) hints.push({ key: '4', label: '撤销报工' })
+  if (ops.some(op => op.status === 'REPORTED' || op.status === 'INSPECT_FAILED')) hints.push({ key: '5', label: '返工' })
+  hints.push({ key: 'Scan', label: '扫码' })
+  hints.push({ key: 'ESC', label: '返回' })
+  return hints
+})
+
+useHardwareInput({
+  onBack() {
+    if (reportVisible.value) { reportVisible.value = false; return }
+    if (undoVisible.value) { undoVisible.value = false; return }
+    if (reworkVisible.value) { reworkVisible.value = false; return }
+    if (inspectVisible.value) { inspectVisible.value = false; return }
+    router.back()
+  },
+
+  onConfirm() {
+    if (!workorder.value) return
+    // Delegate confirm to open dialog's before-close handler
+    if (reportVisible.value) {
+      Promise.resolve(handleReportConfirm('confirm')).then(ok => { if (ok !== false) reportVisible.value = false })
+      return
+    }
+    if (undoVisible.value) {
+      Promise.resolve(handleUndoConfirm('confirm')).then(ok => { if (ok !== false) undoVisible.value = false })
+      return
+    }
+    if (reworkVisible.value) {
+      Promise.resolve(handleReworkConfirm('confirm')).then(ok => { if (ok !== false) reworkVisible.value = false })
+      return
+    }
+    if (inspectVisible.value) {
+      Promise.resolve(handleInspectConfirm('confirm')).then(ok => { if (ok !== false) inspectVisible.value = false })
+      return
+    }
+
+    // No dialog open: primary action (same as old Enter logic)
     const ops = workorder.value.operations || []
     const notStarted = ops.find(op => op.status === 'NOT_STARTED')
     if (notStarted) { handleStart(notStarted); return }
@@ -352,6 +398,52 @@ usePhysicalKeys({
     }
     if (workorder.value.orderType === 'PRODUCTION' && workorder.value.status === 'REPORTED') {
       openWorkOrderInspectDialog()
+    }
+  },
+
+  onShortcut(key) {
+    // When report dialog is open, digits append to quantity field
+    if (reportVisible.value) {
+      reportForm.reportedQuantity = String(reportForm.reportedQuantity || '') + key
+      return
+    }
+    if (!workorder.value) return
+    const ops = workorder.value.operations || []
+    if (key === '1') {
+      const op = ops.find(o => o.status === 'NOT_STARTED')
+      if (op) handleStart(op)
+    } else if (key === '2') {
+      const op = ops.find(o => o.status === 'STARTED' && workorder.value.orderType !== 'INSPECTION')
+      if (op) openReportDialog(op)
+    } else if (key === '3') {
+      const inspectOp = ops.find(o => o.status === 'STARTED' && workorder.value.orderType === 'INSPECTION')
+      if (inspectOp) { openInspectDialog(inspectOp); return }
+      if (workorder.value.orderType === 'PRODUCTION' && workorder.value.status === 'REPORTED') {
+        openWorkOrderInspectDialog()
+      }
+    } else if (key === '4') {
+      const op = ops.find(o => o.status === 'REPORTED')
+      if (op) openUndoDialog(op)
+    } else if (key === '5') {
+      const op = ops.find(o => o.status === 'REPORTED' || o.status === 'INSPECT_FAILED')
+      if (op) openReworkDialog(op)
+    }
+  },
+
+  async onScan(barcode) {
+    try {
+      await scanStart(barcode)
+      showToast({ type: 'success', message: '扫码开工成功' })
+      await loadWorkOrder()
+    } catch {
+      // Try report
+      try {
+        await scanReport(barcode)
+        showToast({ type: 'success', message: '扫码报工成功' })
+        await loadWorkOrder()
+      } catch {
+        showToast({ type: 'fail', message: '扫码失败，请检查条码' })
+      }
     }
   },
 })

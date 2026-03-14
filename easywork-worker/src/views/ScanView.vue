@@ -2,6 +2,20 @@
   <div class="scan-view">
     <van-nav-bar title="扫码操作" />
 
+    <!-- 扫码模式切换 -->
+    <div class="mode-toggle">
+      <van-button
+        :type="scanMode === 'start' ? 'primary' : 'default'"
+        size="small"
+        @click="scanMode = 'start'"
+      >开工模式</van-button>
+      <van-button
+        :type="scanMode === 'report' ? 'success' : 'default'"
+        size="small"
+        @click="scanMode = 'report'"
+      >报工模式</van-button>
+    </div>
+
     <div class="scan-content">
       <!-- 摄像头扫码区域 -->
       <div v-if="cameraActive" class="camera-section">
@@ -69,6 +83,8 @@
       </van-cell-group>
     </div>
 
+    <KeyHints :hints="scanHints" />
+
     <van-tabbar route>
       <van-tabbar-item icon="todo-list-o" to="/workorders">工单</van-tabbar-item>
       <van-tabbar-item icon="scan" to="/scan">扫码</van-tabbar-item>
@@ -78,10 +94,12 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted, onMounted } from 'vue'
 import { showSuccessToast, showFailToast, showToast } from 'vant'
 import { scanStart, scanReport } from '@/api/scan'
 import { useScanStore } from '@/stores/scan'
+import { useHardwareInput } from '@/composables/useHardwareInput'
+import KeyHints from '@/components/KeyHints.vue'
 
 const scanStore = useScanStore()
 
@@ -89,6 +107,33 @@ const barcode = ref('')
 const startLoading = ref(false)
 const reportLoading = ref(false)
 const result = ref(null)
+const scanMode = ref('start') // 'start' | 'report'
+
+const scanHints = computed(() => [
+  { key: 'Scan', label: `自动${scanMode.value === 'start' ? '开工' : '报工'}` },
+  { key: 'Tab', label: '切换模式' },
+])
+
+// Tab key toggles scan mode
+function handleTabKey(e) {
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    scanMode.value = scanMode.value === 'start' ? 'report' : 'start'
+  }
+}
+onMounted(() => document.addEventListener('keydown', handleTabKey))
+onUnmounted(() => document.removeEventListener('keydown', handleTabKey))
+
+useHardwareInput({
+  async onScan(barcodeValue) {
+    barcode.value = barcodeValue
+    if (scanMode.value === 'start') {
+      await handleScanStart()
+    } else {
+      await handleScanReport()
+    }
+  },
+})
 
 // Camera state
 const cameraSupported = ref('BarcodeDetector' in window)
@@ -214,6 +259,13 @@ const handleScanReport = async () => {
   min-height: 100vh;
   background: #f5f5f5;
   padding-bottom: 50px;
+}
+.mode-toggle {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
 }
 .scan-content {
   padding: 16px;

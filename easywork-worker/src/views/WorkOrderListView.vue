@@ -62,6 +62,8 @@
       </van-pull-refresh>
     </div>
 
+    <KeyHints :hints="keyHints" />
+
     <van-tabbar route>
       <van-tabbar-item icon="orders-o" to="/workorders">工单</van-tabbar-item>
       <van-tabbar-item icon="scan" to="/scan">扫码</van-tabbar-item>
@@ -71,12 +73,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { getWorkOrders } from '@/api/workorder'
 import { showToast, showConfirmDialog } from 'vant'
 import { getStatusLabel, getStatusTagType } from '@/utils/statusLabel'
-import { usePhysicalKeys } from '@/composables/usePhysicalKeys'
+import { useHardwareInput } from '@/composables/useHardwareInput'
+import { scanStart } from '@/api/scan'
+import KeyHints from '@/components/KeyHints.vue'
 import http from '@/api/http'
 
 const router = useRouter()
@@ -105,22 +109,47 @@ function scrollToFocused() {
   })
 }
 
-usePhysicalKeys({
-  onKeyPress(key) {
+const keyHints = computed(() => {
+  if (batchMode.value) return []
+  return [
+    { key: '↑↓', label: '切换' },
+    { key: 'Enter', label: '进入' },
+    { key: 'Scan', label: '扫码开工' },
+  ]
+})
+
+useHardwareInput({
+  onNavigate(dir) {
     if (batchMode.value) return
-    if (key === 'LEFT' || key === 'UP') {
+    if (dir === 'up' || dir === 'left') {
       if (currentIndex.value > 0) {
         currentIndex.value--
         scrollToFocused()
       }
-    } else if (key === 'RIGHT' || key === 'DOWN') {
+    } else if (dir === 'down' || dir === 'right') {
       if (currentIndex.value < list.value.length - 1) {
         currentIndex.value++
         scrollToFocused()
       }
-    } else if (key === 'ENTER') {
-      const order = list.value[currentIndex.value]
-      if (order) goDetail(order.id)
+    }
+  },
+  onConfirm() {
+    if (batchMode.value) return
+    const order = list.value[currentIndex.value]
+    if (order) goDetail(order.id)
+  },
+  async onScan(barcode) {
+    if (batchMode.value) return
+    try {
+      const result = await scanStart(barcode)
+      showToast({ type: 'success', message: `开工成功：${result.orderNumber || barcode}` })
+      await onRefresh()
+      // Navigate to the work order detail if we can find it
+      const targetId = result.orderId
+        ?? list.value.find(o => o.orderNumber === result.orderNumber)?.id
+      if (targetId) goDetail(targetId)
+    } catch {
+      showToast({ type: 'fail', message: '扫码开工失败，请检查条码' })
     }
   },
 })
