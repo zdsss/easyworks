@@ -5,6 +5,7 @@ import com.xiaobai.workorder.common.response.PageResponse;
 import com.xiaobai.workorder.common.util.SecurityUtils;
 import com.xiaobai.workorder.modules.workorder.dto.AssignWorkOrderRequest;
 import com.xiaobai.workorder.modules.workorder.dto.CreateWorkOrderRequest;
+import com.xiaobai.workorder.modules.workorder.dto.UpdateWorkOrderRequest;
 import com.xiaobai.workorder.modules.workorder.dto.WorkOrderDTO;
 import com.xiaobai.workorder.modules.workorder.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -53,6 +54,14 @@ public class AdminWorkOrderController {
     public ApiResponse<Void> assignWorkOrder(@Valid @RequestBody AssignWorkOrderRequest request) {
         workOrderService.assignWorkOrder(request);
         return ApiResponse.success("Assignment successful", null);
+    }
+
+    @Operation(summary = "Update work order basic info")
+    @PutMapping("/{id}")
+    public ApiResponse<WorkOrderDTO> updateWorkOrder(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateWorkOrderRequest request) {
+        return ApiResponse.success(workOrderService.updateWorkOrder(id, request));
     }
 
     @Operation(summary = "Complete a work order (INSPECT_PASSED → COMPLETED)")

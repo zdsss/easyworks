@@ -1,5 +1,6 @@
 package com.xiaobai.workorder.modules.statistics.service;
 
+import com.xiaobai.workorder.modules.inspection.repository.InspectionRecordMapper;
 import com.xiaobai.workorder.modules.statistics.dto.StatisticsDTO;
 import com.xiaobai.workorder.modules.workorder.repository.WorkOrderMapper;
 import com.xiaobai.workorder.modules.report.repository.ReportRecordMapper;
@@ -10,8 +11,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +25,7 @@ public class StatisticsService {
     private final WorkOrderMapper workOrderMapper;
     private final ReportRecordMapper reportRecordMapper;
     private final UserMapper userMapper;
+    private final InspectionRecordMapper inspectionRecordMapper;
 
     public StatisticsDTO getDashboardStats() {
         // SQL aggregation: one query for counts by status (no full table load)
@@ -100,5 +104,38 @@ public class StatisticsService {
         stats.setWorkerStats(workerStats);
 
         return stats;
+    }
+
+    public List<Map<String, Object>> getInspectionTrend(int days) {
+        LocalDate startDate = LocalDate.now().minusDays(days - 1);
+        List<Map<String, Object>> rows = inspectionRecordMapper.countByDateGrouped(startDate);
+
+        // Build a map keyed by date string, ensuring all days are present
+        Map<String, Map<String, Object>> byDate = new LinkedHashMap<>();
+        for (int i = days - 1; i >= 0; i--) {
+            String dateStr = LocalDate.now().minusDays(i).toString();
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("date", dateStr);
+            entry.put("passed", 0L);
+            entry.put("failed", 0L);
+            byDate.put(dateStr, entry);
+        }
+
+        for (Map<String, Object> row : rows) {
+            Object dateObj = row.get("date");
+            if (dateObj == null) continue;
+            String dateStr = dateObj.toString();
+            Map<String, Object> entry = byDate.get(dateStr);
+            if (entry == null) continue;
+            String result = (String) row.get("result");
+            long cnt = ((Number) row.get("cnt")).longValue();
+            if ("PASSED".equals(result)) {
+                entry.put("passed", cnt);
+            } else if ("FAILED".equals(result)) {
+                entry.put("failed", cnt);
+            }
+        }
+
+        return new ArrayList<>(byDate.values());
     }
 }

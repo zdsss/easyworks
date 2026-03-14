@@ -37,6 +37,11 @@ const routes = [
         component: () => import('@/views/workorder/WorkOrderDetailView.vue'),
       },
       {
+        path: 'workorders/:id/edit',
+        name: 'WorkOrderEdit',
+        component: () => import('@/views/workorder/WorkOrderEditView.vue'),
+      },
+      {
         path: 'users',
         name: 'Users',
         component: () => import('@/views/UserView.vue'),

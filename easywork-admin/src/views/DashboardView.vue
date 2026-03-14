@@ -28,9 +28,21 @@
       </template>
       <el-table :data="typeStats" stripe>
         <el-table-column prop="orderType" label="工单类型" />
-        <el-table-column prop="total" label="总数" width="100" />
+        <el-table-column prop="count" label="总数" width="100" />
         <el-table-column prop="completedCount" label="已完成" width="100" />
+        <el-table-column label="完成率" width="120">
+          <template #default="{ row }">
+            <span>{{ row.count > 0 ? ((row.completedCount / row.count) * 100).toFixed(1) + '%' : '-' }}</span>
+          </template>
+        </el-table-column>
       </el-table>
+    </el-card>
+
+    <el-card shadow="never" style="margin-top: 16px">
+      <template #header>
+        <span>近 7 天质检趋势</span>
+      </template>
+      <div ref="chartRef" style="height: 280px" />
     </el-card>
 
     <el-card shadow="never" style="margin-top: 16px">
@@ -48,8 +60,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getDashboard } from '@/api/statistics'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import * as echarts from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import { getDashboard, getInspectionTrend } from '@/api/statistics'
+
+echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const loading = ref(false)
 const stats = ref([
@@ -62,11 +80,49 @@ const stats = ref([
 const completionRate = ref(0)
 const typeStats = ref([])
 const workerOutput = ref([])
+const chartRef = ref(null)
+let chartInstance = null
+
+function initChart(trendData) {
+  if (!chartRef.value) return
+  if (!chartInstance) {
+    chartInstance = echarts.init(chartRef.value)
+  }
+  const dates = trendData.map((d) => d.date)
+  const passed = trendData.map((d) => Number(d.passed ?? 0))
+  const failed = trendData.map((d) => Number(d.failed ?? 0))
+  chartInstance.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['质检通过', '质检不通过'] },
+    grid: { left: 40, right: 20, top: 40, bottom: 30 },
+    xAxis: { type: 'category', data: dates },
+    yAxis: { type: 'value', minInterval: 1 },
+    series: [
+      {
+        name: '质检通过',
+        type: 'line',
+        data: passed,
+        itemStyle: { color: '#67c23a' },
+        smooth: true,
+      },
+      {
+        name: '质检不通过',
+        type: 'line',
+        data: failed,
+        itemStyle: { color: '#f56c6c' },
+        smooth: true,
+      },
+    ],
+  })
+}
 
 async function loadData() {
   loading.value = true
   try {
-    const data = await getDashboard()
+    const [data, trend] = await Promise.all([
+      getDashboard(),
+      getInspectionTrend(7).catch(() => []),
+    ])
     if (data) {
       stats.value = [
         { label: '总工单数', value: data.totalWorkOrders ?? 0 },
@@ -80,6 +136,8 @@ async function loadData() {
       typeStats.value = data.typeStats ?? []
       workerOutput.value = data.workerStats ?? []
     }
+    await nextTick()
+    initChart(Array.isArray(trend) ? trend : [])
   } catch {
     // error handled in http interceptor
   } finally {
@@ -88,6 +146,9 @@ async function loadData() {
 }
 
 onMounted(loadData)
+onUnmounted(() => {
+  chartInstance?.dispose()
+})
 </script>
 
 <style scoped>

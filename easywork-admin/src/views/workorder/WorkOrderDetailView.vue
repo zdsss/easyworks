@@ -26,6 +26,7 @@
       </el-descriptions>
 
       <div style="margin-top: 24px; display: flex; gap: 12px">
+        <el-button @click="router.push(`/workorders/${workorder.id}/edit`)">编辑</el-button>
         <el-button type="primary" @click="openAssignDialog">派工</el-button>
         <el-button
           v-if="workorder.status === 'INSPECT_PASSED'"
@@ -43,7 +44,12 @@
     </el-card>
 
     <el-card shadow="never" style="margin-top: 16px" v-if="workorder">
-      <template #header>工序列表</template>
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span>工序列表</span>
+          <el-button type="info" size="small" @click="openGraphDialog">依赖图</el-button>
+        </div>
+      </template>
       <el-table :data="workorder.operations" stripe>
         <el-table-column prop="operationName" label="工序名称" />
         <el-table-column prop="operationNumber" label="工序编号" width="160" />
@@ -67,6 +73,25 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- Dependency Graph Dialog -->
+    <el-dialog v-model="graphVisible" title="工序依赖图" width="800px">
+      <div v-if="graphLoading" style="height: 500px; display: flex; align-items: center; justify-content: center">
+        <el-text>加载中...</el-text>
+      </div>
+      <div v-else style="height: 500px">
+        <VueFlow
+          v-if="graphNodes.length > 0"
+          :nodes="graphNodes"
+          :edges="graphEdges"
+          :fit-view-on-init="true"
+          style="width: 100%; height: 100%"
+        />
+        <div v-else style="height: 100%; display: flex; align-items: center; justify-content: center; color: #999">
+          暂无工序依赖关系
+        </div>
+      </div>
+    </el-dialog>
 
     <!-- Dependency Dialog -->
     <el-dialog v-model="depVisible" title="配置工序依赖" width="600px">
@@ -154,9 +179,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { VueFlow, MarkerType } from '@vue-flow/core'
+import '@vue-flow/core/dist/style.css'
 import { getWorkOrder, assignWorkOrder, completeWorkOrder, reopenWorkOrder } from '@/api/workorder'
 import { getUsers } from '@/api/user'
 import { getTeams } from '@/api/team'
@@ -164,6 +191,7 @@ import { getDependencies, addDependency } from '@/api/dependency'
 import { getStatusLabel, getStatusTagType } from '@/utils/statusLabel'
 
 const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const workorder = ref(null)
 const assignVisible = ref(false)
@@ -185,6 +213,11 @@ const activeDepOp = ref(null)
 const deps = ref([])
 const addingDep = ref(false)
 const depForm = reactive({ predecessorId: null, type: 'SERIAL', condition: '' })
+
+const graphVisible = ref(false)
+const graphLoading = ref(false)
+const graphNodes = ref([])
+const graphEdges = ref([])
 
 function formatDate(val) {
   if (!val) return '-'
@@ -304,6 +337,55 @@ async function handleAddDep() {
     // handled
   } finally {
     addingDep.value = false
+  }
+}
+
+async function openGraphDialog() {
+  graphVisible.value = true
+  graphLoading.value = true
+  graphNodes.value = []
+  graphEdges.value = []
+
+  const ops = workorder.value?.operations ?? []
+  if (!ops.length) {
+    graphLoading.value = false
+    return
+  }
+
+  try {
+    // Fetch dependencies for all operations concurrently
+    const depResults = await Promise.all(
+      ops.map((op) => getDependencies(op.id).catch(() => []))
+    )
+
+    // Build nodes sorted by sequenceNumber
+    const sorted = [...ops].sort((a, b) => (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0))
+    const COLS = Math.ceil(Math.sqrt(sorted.length))
+    graphNodes.value = sorted.map((op, idx) => ({
+      id: String(op.id),
+      label: op.operationName,
+      position: { x: (idx % COLS) * 200, y: Math.floor(idx / COLS) * 120 },
+    }))
+
+    // Build edges from dependency results
+    const edges = []
+    ops.forEach((op, i) => {
+      const opDeps = depResults[i] ?? []
+      opDeps.forEach((dep) => {
+        edges.push({
+          id: `e${dep.predecessorId}-${op.id}`,
+          source: String(dep.predecessorId),
+          target: String(op.id),
+          label: dep.type,
+          markerEnd: { type: MarkerType.ArrowClosed },
+        })
+      })
+    })
+    graphEdges.value = edges
+  } catch {
+    // handled
+  } finally {
+    graphLoading.value = false
   }
 }
 

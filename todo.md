@@ -3,24 +3,24 @@
 ## 待办
 
 ### P1 — 工人端扫码页面
-- [ ] `easywork-worker/src/views/ScanView.vue` — 调用摄像头或接收扫码枪键盘输入
-- [ ] 路由注册 `/scan`，入口放在工单列表页顶部
-- [ ] 扫码后调用 `POST /device/scan/start` 或 `POST /device/scan/report`，自动跳转结果
+- [x] `easywork-worker/src/views/ScanView.vue` — 调用摄像头或接收扫码枪键盘输入
+- [x] 路由注册 `/scan`，入口放在工单列表页顶部
+- [x] 扫码后调用 `POST /device/scan/start` 或 `POST /device/scan/report`，自动跳转结果
 
 ### P1 — 工人端批量操作页面
-- [ ] `BatchView.vue` — 多选工序 + 批量开工/报工
-- [ ] 调用 `POST /device/batch/start` / `POST /device/batch/report`
+- [x] `BatchView.vue` — 多选工序 + 批量开工/报工
+- [x] 调用 `POST /device/batch/start` / `POST /device/batch/report`
 
 ### P2 — 管理端工单编辑
-- [ ] `WorkOrderEditView.vue` — 编辑工单基本信息（产品名/数量/时间/备注）
-- [ ] 需后端新增 `PUT /api/admin/work-orders/:id` 接口
+- [x] `WorkOrderEditView.vue` — 编辑工单基本信息（产品名/数量/时间/备注）
+- [x] 需后端新增 `PUT /api/admin/work-orders/:id` 接口
 
 ### P2 — 统计看板增强
-- [ ] 按 orderType 分组展示完成率
-- [ ] 质检通过率趋势图（折线图）
+- [x] 按 orderType 分组展示完成率
+- [x] 质检通过率趋势图（折线图，ECharts）
 
 ### P3 — 工序依赖可视化
-- [ ] 管理端工单详情页：工序依赖关系用有向图展示（可用 Vue Flow 或 D3）
+- [x] 管理端工单详情页：工序依赖关系用有向图展示（Vue Flow）
 
 ---
 

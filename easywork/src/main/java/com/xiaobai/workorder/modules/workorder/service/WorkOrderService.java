@@ -10,6 +10,7 @@ import com.xiaobai.workorder.modules.operation.repository.OperationAssignmentMap
 import com.xiaobai.workorder.modules.operation.repository.OperationMapper;
 import com.xiaobai.workorder.modules.workorder.dto.AssignWorkOrderRequest;
 import com.xiaobai.workorder.modules.workorder.dto.CreateWorkOrderRequest;
+import com.xiaobai.workorder.modules.workorder.dto.UpdateWorkOrderRequest;
 import com.xiaobai.workorder.modules.workorder.dto.WorkOrderDTO;
 import com.xiaobai.workorder.modules.workorder.entity.WorkOrder;
 import com.xiaobai.workorder.modules.workorder.repository.WorkOrderMapper;
@@ -211,6 +212,38 @@ public class WorkOrderService {
         eventPublisher.publishEvent(new WorkOrderStatusChangedEvent(
                 this, id, previousStatus, "REPORTED", null));
         log.info("Work order {} reopened for rework", id);
+    }
+
+    @Transactional
+    public WorkOrderDTO updateWorkOrder(Long id, UpdateWorkOrderRequest request) {
+        WorkOrder workOrder = workOrderMapper.selectById(id);
+        if (workOrder == null || workOrder.getDeleted() == 1) {
+            throw new BusinessException("Work order not found: " + id);
+        }
+        if (request.getProductName() != null) {
+            workOrder.setProductName(request.getProductName());
+        }
+        if (request.getProductCode() != null) {
+            workOrder.setProductCode(request.getProductCode());
+        }
+        if (request.getPlannedQuantity() != null) {
+            workOrder.setPlannedQuantity(request.getPlannedQuantity());
+        }
+        if (request.getPriority() != null) {
+            workOrder.setPriority(request.getPriority());
+        }
+        if (request.getPlannedStartTime() != null) {
+            workOrder.setPlannedStartTime(request.getPlannedStartTime());
+        }
+        if (request.getPlannedEndTime() != null) {
+            workOrder.setPlannedEndTime(request.getPlannedEndTime());
+        }
+        if (request.getNotes() != null) {
+            workOrder.setNotes(request.getNotes());
+        }
+        workOrderMapper.updateById(workOrder);
+        log.info("Work order {} updated", workOrder.getOrderNumber());
+        return toDTOWithOperations(workOrder, operationMapper.findByWorkOrderId(workOrder.getId()));
     }
 
     public WorkOrderDTO getWorkOrderByBarcode(String barcode, Long userId) {

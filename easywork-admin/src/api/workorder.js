@@ -16,6 +16,10 @@ export function assignWorkOrder(data) {
   return http.post('/admin/work-orders/assign', data)
 }
 
+export function updateWorkOrder(id, data) {
+  return http.put(`/admin/work-orders/${id}`, data)
+}
+
 export function completeWorkOrder(id) {
   return http.put(`/admin/work-orders/${id}/complete`)
 }
