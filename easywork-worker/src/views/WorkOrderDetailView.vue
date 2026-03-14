@@ -55,7 +55,7 @@
             :loading="actionLoading[op.id]"
             @click="handleStart(op)"
           >
-            开工
+            {{ getStartLabel(workorder.orderType) }}
           </van-button>
 
           <!-- 检验工单：STARTED 时显示「提交质检」替代「报工」 -->
@@ -69,7 +69,7 @@
             提交质检
           </van-button>
 
-          <!-- 非检验工单：STARTED 时显示「报工」 -->
+          <!-- 非检验工单：STARTED 时显示报工（文案按类型） -->
           <van-button
             v-if="op.status === 'STARTED' && workorder.orderType !== 'INSPECTION'"
             type="warning"
@@ -77,7 +77,7 @@
             :loading="actionLoading[op.id]"
             @click="openReportDialog(op)"
           >
-            报工
+            {{ getReportLabel(workorder.orderType) }}
           </van-button>
 
           <van-button
@@ -127,6 +127,16 @@
         <van-cell title="不合格原因" :value="inspection.defectReason || '-'" />
         <van-cell title="检验时间" :value="formatDate(inspection.inspectionTime)" />
       </van-cell-group>
+
+      <!-- PRODUCTION 工单报工后：工人端质检入口 -->
+      <div
+        v-if="workorder.orderType === 'PRODUCTION' && workorder.status === 'REPORTED'"
+        class="call-section"
+      >
+        <van-button round block type="success" icon="passed" @click="openWorkOrderInspectDialog">
+          提交质检
+        </van-button>
+      </div>
 
       <!-- 呼叫按鈕 -->
       <div class="call-section">
@@ -276,6 +286,7 @@ import { startWork, reportWork, undoReport } from '@/api/report'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { enqueue, processQueue } from '@/utils/offlineQueue'
 import { getStatusLabel, getStatusTagType } from '@/utils/statusLabel'
+import { usePhysicalKeys } from '@/composables/usePhysicalKeys'
 import http from '@/api/http'
 
 const route = useRoute()
@@ -306,6 +317,43 @@ const { isOnline } = useNetworkStatus()
 // Auto-process queue when back online
 watch(isOnline, (online) => {
   if (online) processQueue(http)
+})
+
+// Button label helpers (Task 2: differentiated by orderType)
+function getStartLabel(orderType) {
+  if (orderType === 'TRANSPORT') return '开始转运'
+  if (orderType === 'ANDON') return '开始处理'
+  return '开工'
+}
+
+function getReportLabel(orderType) {
+  if (orderType === 'TRANSPORT') return '完成转运'
+  if (orderType === 'ANDON') return '处理完成'
+  return '报工'
+}
+
+// Physical key: Enter triggers primary action (Task 1)
+usePhysicalKeys({
+  onKeyPress(key) {
+    if (key !== 'ENTER' || !workorder.value) return
+    // If any dialog is open, do not interfere
+    if (reportVisible.value || undoVisible.value || reworkVisible.value || inspectVisible.value) return
+    const ops = workorder.value.operations || []
+    const notStarted = ops.find(op => op.status === 'NOT_STARTED')
+    if (notStarted) { handleStart(notStarted); return }
+    const started = ops.find(op => op.status === 'STARTED')
+    if (started) {
+      if (workorder.value.orderType === 'INSPECTION') {
+        openInspectDialog(started)
+      } else {
+        openReportDialog(started)
+      }
+      return
+    }
+    if (workorder.value.orderType === 'PRODUCTION' && workorder.value.status === 'REPORTED') {
+      openWorkOrderInspectDialog()
+    }
+  },
 })
 
 // Computed remaining quantity for the active operation
@@ -354,8 +402,9 @@ function goToCall() {
   router.push({ name: 'Call', query: { workOrderId: workorder.value?.id } })
 }
 async function handleStart(op) {
+  const chainId = `op-${op.id}`
   if (!isOnline.value) {
-    await enqueue({ method: 'post', url: '/device/start', body: { operationId: op.id }, label: '开工' })
+    await enqueue({ method: 'post', url: '/device/start', body: { operationId: op.id }, label: '开工', chainId })
     showToast({ type: 'success', message: '已离线排队，联网后自动提交' })
     return
   }
@@ -366,7 +415,7 @@ async function handleStart(op) {
     await loadWorkOrder()
   } catch (e) {
     if (!e.response) {
-      await enqueue({ method: 'post', url: '/device/start', body: { operationId: op.id }, label: '开工' })
+      await enqueue({ method: 'post', url: '/device/start', body: { operationId: op.id }, label: '开工', chainId })
       showToast({ type: 'success', message: '已离线排队，联网后自动提交' })
     }
   } finally {
@@ -409,6 +458,7 @@ async function handleReportConfirm(action) {
   if (reportForm.qualifiedQuantity) payload.qualifiedQuantity = Number(reportForm.qualifiedQuantity)
   if (reportForm.defectQuantity) payload.defectQuantity = Number(reportForm.defectQuantity)
   if (reportForm.notes) payload.notes = reportForm.notes
+  const chainId = `op-${activeOp.value.id}`
   try {
     await reportWork(payload)
     showToast({ type: 'success', message: '报工成功' })
@@ -416,7 +466,7 @@ async function handleReportConfirm(action) {
     return true
   } catch (e) {
     if (!e.response) {
-      await enqueue({ method: 'post', url: '/device/report', body: payload, label: '报工' })
+      await enqueue({ method: 'post', url: '/device/report', body: payload, label: '报工', chainId })
       showToast({ type: 'success', message: '已离线排队，联网后自动提交' })
       return true
     }
@@ -511,17 +561,38 @@ function openInspectDialog(op) {
   inspectVisible.value = true
 }
 
+// Work-order level inspection (PRODUCTION + REPORTED)
+function openWorkOrderInspectDialog() {
+  activeOp.value = null
+  Object.assign(inspectForm, {
+    inspectionResult: 'PASSED',
+    inspectedQuantity: '',
+    qualifiedQuantity: '',
+    defectQuantity: '',
+    defectReason: '',
+    notes: '',
+  })
+  inspectVisible.value = true
+}
+
+const workOrderInspectLoading = ref(false)
+
 async function handleInspectConfirm(action) {
   if (action !== 'confirm') return true
   if (!inspectForm.inspectionResult) {
     showToast('请选择检验结果')
     return false
   }
-  actionLoading[activeOp.value.id] = true
+  const loadingKey = activeOp.value ? activeOp.value.id : '__workorder__'
+  if (activeOp.value) {
+    actionLoading[loadingKey] = true
+  } else {
+    workOrderInspectLoading.value = true
+  }
   try {
     await submitInspection({
       workOrderId: workorder.value.id,
-      operationId: activeOp.value.id,
+      ...(activeOp.value && { operationId: activeOp.value.id }),
       inspectionResult: inspectForm.inspectionResult,
       ...(inspectForm.inspectedQuantity && { inspectedQuantity: Number(inspectForm.inspectedQuantity) }),
       ...(inspectForm.qualifiedQuantity && { qualifiedQuantity: Number(inspectForm.qualifiedQuantity) }),
@@ -535,7 +606,11 @@ async function handleInspectConfirm(action) {
   } catch {
     return false
   } finally {
-    actionLoading[activeOp.value.id] = false
+    if (activeOp.value) {
+      actionLoading[loadingKey] = false
+    } else {
+      workOrderInspectLoading.value = false
+    }
   }
 }
 

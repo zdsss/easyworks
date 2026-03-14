@@ -2,6 +2,8 @@ package com.xiaobai.workorder.modules.audit.aspect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiaobai.workorder.modules.audit.service.AuditLogService;
+import com.xiaobai.workorder.modules.operation.entity.Operation;
+import com.xiaobai.workorder.modules.operation.repository.OperationMapper;
 import com.xiaobai.workorder.modules.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Map;
 
 @Slf4j
 @Aspect
@@ -24,23 +27,74 @@ public class AuditLogAspect {
 
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
+    private final OperationMapper operationMapper;
 
     @Around("@annotation(auditable)")
     public Object logOperation(ProceedingJoinPoint joinPoint, Auditable auditable) throws Throwable {
         Long userId = getCurrentUserId();
         String ipAddress = getClientIp();
 
+        // Capture before-state: extract operationId from args and query current status
+        String beforeState = null;
+        Long targetId = null;
+        try {
+            Long operationId = extractOperationId(joinPoint.getArgs());
+            if (operationId != null) {
+                targetId = operationId;
+                Operation before = operationMapper.selectById(operationId);
+                if (before != null) {
+                    beforeState = objectMapper.writeValueAsString(
+                        Map.of("status", before.getStatus(),
+                               "completedQuantity", before.getCompletedQuantity()));
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to capture before-state", e);
+        }
+
         Object result = joinPoint.proceed();
 
+        // Capture after-state
         try {
-            String afterState = objectMapper.writeValueAsString(result);
+            if (targetId == null) {
+                targetId = extractTargetId(result);
+            }
+            String afterState = null;
+            if (targetId != null) {
+                Operation after = operationMapper.selectById(targetId);
+                if (after != null) {
+                    afterState = objectMapper.writeValueAsString(
+                        Map.of("status", after.getStatus(),
+                               "completedQuantity", after.getCompletedQuantity()));
+                }
+            } else {
+                afterState = result != null ? objectMapper.writeValueAsString(result) : null;
+            }
             auditLogService.log(userId, auditable.operation(), auditable.targetType(),
-                    extractTargetId(result), null, afterState, ipAddress, null);
+                    targetId, beforeState, afterState, ipAddress, null);
         } catch (Exception e) {
             log.error("Failed to log operation", e);
         }
 
         return result;
+    }
+
+    /**
+     * Extracts the operationId from method arguments.
+     * Handles: Long (direct id), or objects with a getOperationId() method.
+     */
+    private Long extractOperationId(Object[] args) {
+        if (args == null || args.length == 0) return null;
+        Object first = args[0];
+        if (first instanceof Long) {
+            return (Long) first;
+        }
+        // Try getOperationId() for DTO objects (ReportRequest, UndoReportRequest)
+        try {
+            return (Long) first.getClass().getMethod("getOperationId").invoke(first);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private Long getCurrentUserId() {

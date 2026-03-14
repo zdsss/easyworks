@@ -25,9 +25,25 @@
 
       <el-table :data="logs" v-loading="logsLoading" stripe>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="operationType" label="操作类型" />
-        <el-table-column prop="targetType" label="目标类型" width="160" />
+        <el-table-column prop="operationType" label="操作类型" width="140" />
+        <el-table-column prop="targetType" label="目标类型" width="140" />
         <el-table-column prop="targetId" label="目标ID" width="100" />
+        <el-table-column label="变更前状态" width="160">
+          <template #default="{ row }">
+            <el-tooltip v-if="row.beforeState" :content="row.beforeState" placement="top">
+              <span class="state-chip state-before">{{ parseState(row.beforeState) }}</span>
+            </el-tooltip>
+            <span v-else class="state-empty">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="变更后状态" width="160">
+          <template #default="{ row }">
+            <el-tooltip v-if="row.afterState" :content="row.afterState" placement="top">
+              <span class="state-chip state-after">{{ parseState(row.afterState) }}</span>
+            </el-tooltip>
+            <span v-else class="state-empty">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="ipAddress" label="IP 地址" width="140" />
         <el-table-column prop="createdAt" label="时间" width="180">
           <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
@@ -87,5 +103,37 @@ function formatDate(val) {
   return new Date(val).toLocaleString('zh-CN', { hour12: false })
 }
 
+function parseState(json) {
+  if (!json) return '-'
+  try {
+    const obj = JSON.parse(json)
+    if (obj.status) return obj.status
+    return JSON.stringify(obj)
+  } catch {
+    return json
+  }
+}
+
 onMounted(() => loadLogs())
 </script>
+
+<style scoped>
+.state-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: default;
+}
+.state-before {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+.state-after {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+.state-empty {
+  color: #c0c4cc;
+}
+</style>

@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <van-nav-bar title="我的工单" fixed>
+    <van-nav-bar :title="navTitle" fixed>
       <template #right>
         <van-button v-if="!batchMode" size="small" type="primary" @click="batchMode = true">批量</van-button>
         <van-button v-else size="small" @click="exitBatchMode">取消</van-button>
@@ -21,10 +21,11 @@
           @load="onLoad"
         >
           <div
-            v-for="order in list"
+            v-for="(order, idx) in list"
             :key="order.id"
-            class="order-card"
-            @click="handleCardClick(order)"
+            :class="['order-card', !batchMode && idx === currentIndex ? 'focused' : '']"
+            :data-index="idx"
+            @click="handleCardClick(order, idx)"
           >
             <van-checkbox v-if="batchMode" v-model="order.checked" @click.stop />
             <div class="card-header">
@@ -70,11 +71,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getWorkOrders } from '@/api/workorder'
 import { showToast, showConfirmDialog } from 'vant'
 import { getStatusLabel, getStatusTagType } from '@/utils/statusLabel'
+import { usePhysicalKeys } from '@/composables/usePhysicalKeys'
 import http from '@/api/http'
 
 const router = useRouter()
@@ -83,11 +85,45 @@ const refreshing = ref(false)
 const finished = ref(false)
 const list = ref([])
 const batchMode = ref(false)
+const currentIndex = ref(0)
 let allOrders = []
 const pageSize = 10
 
 const selectedCount = computed(() => list.value.filter(o => o.checked).length)
 const allSelected = computed(() => list.value.length > 0 && list.value.every(o => o.checked))
+const navTitle = computed(() => {
+  if (!batchMode.value && list.value.length > 0) {
+    return `我的工单 (${currentIndex.value + 1}/${list.value.length})`
+  }
+  return '我的工单'
+})
+
+function scrollToFocused() {
+  nextTick(() => {
+    const el = document.querySelector('.order-card.focused')
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+usePhysicalKeys({
+  onKeyPress(key) {
+    if (batchMode.value) return
+    if (key === 'LEFT' || key === 'UP') {
+      if (currentIndex.value > 0) {
+        currentIndex.value--
+        scrollToFocused()
+      }
+    } else if (key === 'RIGHT' || key === 'DOWN') {
+      if (currentIndex.value < list.value.length - 1) {
+        currentIndex.value++
+        scrollToFocused()
+      }
+    } else if (key === 'ENTER') {
+      const order = list.value[currentIndex.value]
+      if (order) goDetail(order.id)
+    }
+  },
+})
 
 function toggleSelectAll() {
   const newValue = !allSelected.value
@@ -99,10 +135,11 @@ function exitBatchMode() {
   list.value.forEach(o => o.checked = false)
 }
 
-function handleCardClick(order) {
+function handleCardClick(order, idx) {
   if (batchMode.value) {
     order.checked = !order.checked
   } else {
+    currentIndex.value = idx
     goDetail(order.id)
   }
 }
@@ -175,6 +212,7 @@ async function onRefresh() {
   allOrders = []
   list.value = []
   finished.value = false
+  currentIndex.value = 0
   await onLoad()
   refreshing.value = false
 }
@@ -202,6 +240,13 @@ function goDetail(id) {
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.order-card.focused {
+  border-color: #1989fa;
+  box-shadow: 0 2px 8px rgba(25, 137, 250, 0.2);
 }
 
 .card-header {

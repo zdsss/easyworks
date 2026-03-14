@@ -45,6 +45,12 @@ export async function dequeue(id) {
   })
 }
 
+/**
+ * Process the offline queue in order.
+ * Items with a `chainId` are treated as a chain: if one item in a chain fails,
+ * all subsequent items with the same chainId are skipped (removed from queue).
+ * Returns a summary: { processed, skipped, failed }
+ */
 export async function processQueue(httpInstance) {
   let items
   try {
@@ -52,7 +58,18 @@ export async function processQueue(httpInstance) {
   } catch {
     return
   }
+
+  const failedChains = new Set()
+  let skipped = 0
+
   for (const item of items) {
+    // If this item belongs to a failed chain, skip it
+    if (item.chainId && failedChains.has(item.chainId)) {
+      await dequeue(item.id)
+      skipped++
+      continue
+    }
+
     try {
       await httpInstance({ method: item.method, url: item.url, data: item.body })
       await dequeue(item.id)
@@ -60,8 +77,18 @@ export async function processQueue(httpInstance) {
       if (e.response) {
         // Server rejected (4xx/5xx) - discard to avoid infinite retry
         await dequeue(item.id)
+        if (item.chainId) {
+          failedChains.add(item.chainId)
+        }
       }
-      // Network error: keep in queue for next time
+      // Network error: keep in queue for next time, but break chain
+      if (!e.response && item.chainId) {
+        failedChains.add(item.chainId)
+      }
     }
+  }
+
+  if (skipped > 0) {
+    console.warn(`[offlineQueue] ${skipped} item(s) skipped due to chain failures. Please check manually.`)
   }
 }

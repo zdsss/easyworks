@@ -96,6 +96,56 @@
         添加工序
       </el-button>
 
+      <!-- 工序依赖配置 -->
+      <el-divider v-if="form.operations.length > 1">工序依赖关系（可选）</el-divider>
+
+      <div v-if="form.operations.length > 1">
+        <div
+          v-for="(dep, idx) in form.dependencies"
+          :key="idx"
+          class="dependency-row"
+        >
+          <el-row :gutter="12" align="middle">
+            <el-col :span="9">
+              <el-select v-model="dep.predecessorIdx" placeholder="前置工序" style="width: 100%">
+                <el-option
+                  v-for="(op, i) in form.operations"
+                  :key="i"
+                  :label="`${i + 1}. ${op.operationName || '未命名'}`"
+                  :value="i"
+                  :disabled="i === dep.operationIdx"
+                />
+              </el-select>
+            </el-col>
+            <el-col :span="5">
+              <el-select v-model="dep.dependencyType" style="width: 100%">
+                <el-option label="串行（必须完成）" value="SERIAL" />
+                <el-option label="并行（参考）" value="PARALLEL" />
+              </el-select>
+            </el-col>
+            <el-col :span="1" style="text-align: center; color: #999">→</el-col>
+            <el-col :span="7">
+              <el-select v-model="dep.operationIdx" placeholder="后续工序" style="width: 100%">
+                <el-option
+                  v-for="(op, i) in form.operations"
+                  :key="i"
+                  :label="`${i + 1}. ${op.operationName || '未命名'}`"
+                  :value="i"
+                  :disabled="i === dep.predecessorIdx"
+                />
+              </el-select>
+            </el-col>
+            <el-col :span="2">
+              <el-button type="danger" :icon="Delete" circle @click="removeDependency(idx)" />
+            </el-col>
+          </el-row>
+        </div>
+
+        <el-button :icon="Plus" @click="addDependency" style="width: 100%; margin-bottom: 24px">
+          添加工序依赖
+        </el-button>
+      </div>
+
       <el-form-item>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">创建工单</el-button>
         <el-button @click="$router.back()">取消</el-button>
@@ -110,6 +160,7 @@ import { useRouter } from 'vue-router'
 import { ArrowLeft, Plus, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { createWorkOrder } from '@/api/workorder'
+import { addDependency as postDependency } from '@/api/dependency'
 
 const router = useRouter()
 const formRef = ref(null)
@@ -126,6 +177,7 @@ const form = reactive({
   plannedEndTime: null,
   notes: '',
   operations: [{ operationName: '', stationCode: '', plannedQuantity: 1, sequenceNumber: 1 }],
+  dependencies: [],
 })
 
 const rules = {
@@ -145,8 +197,23 @@ function addOperation() {
 
 function removeOperation(idx) {
   form.operations.splice(idx, 1)
-  // renumber
   form.operations.forEach((op, i) => { op.sequenceNumber = i + 1 })
+  // Remove dependencies referencing this index and fix indices
+  form.dependencies = form.dependencies
+    .filter(d => d.predecessorIdx !== idx && d.operationIdx !== idx)
+    .map(d => ({
+      ...d,
+      predecessorIdx: d.predecessorIdx > idx ? d.predecessorIdx - 1 : d.predecessorIdx,
+      operationIdx: d.operationIdx > idx ? d.operationIdx - 1 : d.operationIdx,
+    }))
+}
+
+function addDependency() {
+  form.dependencies.push({ predecessorIdx: null, operationIdx: null, dependencyType: 'SERIAL' })
+}
+
+function removeDependency(idx) {
+  form.dependencies.splice(idx, 1)
 }
 
 async function handleSubmit() {
@@ -155,7 +222,24 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    await createWorkOrder(form)
+    const { dependencies: deps, ...workOrderData } = form
+    const createdWorkOrder = await createWorkOrder(workOrderData)
+
+    // Post dependencies using operation IDs from response
+    const createdOps = createdWorkOrder?.operations || []
+    const validDeps = deps.filter(d => d.predecessorIdx !== null && d.operationIdx !== null)
+    for (const dep of validDeps) {
+      const predecessorOp = createdOps[dep.predecessorIdx]
+      const targetOp = createdOps[dep.operationIdx]
+      if (predecessorOp?.id && targetOp?.id) {
+        await postDependency({
+          operationId: targetOp.id,
+          predecessorOperationId: predecessorOp.id,
+          dependencyType: dep.dependencyType,
+        }).catch(() => {})
+      }
+    }
+
     ElMessage.success('工单创建成功')
     router.push('/workorders')
   } catch {
@@ -173,5 +257,8 @@ async function handleSubmit() {
 .op-index {
   font-weight: bold;
   color: #666;
+}
+.dependency-row {
+  margin-bottom: 12px;
 }
 </style>

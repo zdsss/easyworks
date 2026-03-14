@@ -6,7 +6,11 @@ export function usePhysicalKeys(handlers = {}) {
     '53': '5', '54': '6', '55': '7', '56': '8', '57': '9',
     '13': 'ENTER',
     '8': 'BACKSPACE',
-    '27': 'ESC'
+    '27': 'ESC',
+    '37': 'LEFT',
+    '38': 'UP',
+    '39': 'RIGHT',
+    '40': 'DOWN',
   }
 
   let keyDownTime = {}
