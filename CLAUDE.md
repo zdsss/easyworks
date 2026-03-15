@@ -40,6 +40,7 @@ easyworks/
 - **对接 API**：`/api/auth/**`、`/api/device/**`
 - **使用角色**：WORKER
 - **用户场景**：移动端浏览器（平板/手机），工人操作
+- **硬件输入**：`useHardwareInput.js`（扫码枪识别 50ms 阈值、方向键导航、数字快捷键、ESC 返回）；`KeyHints.vue`（固定在 tabbar 上方的快捷键提示条）
 
 ---
 
@@ -110,6 +111,19 @@ Worker：http://localhost:5174
 | statistics | `modules/statistics` | 统计看板 |
 | mesintegration | `modules/mesintegration` | MES 双向同步 |
 | audit | `modules/audit` | 操作审计日志（ISO 9001） |
+
+---
+
+## 工人端关键组件（前端）
+
+| 文件 | 说明 |
+|------|------|
+| `composables/useHardwareInput.js` | 硬件输入语义化层：扫码枪识别（capture phase，50ms 阈值）、方向键导航、数字快捷键、ESC 返回。输入框聚焦时所有事件直接透传，不干扰键盘录入 |
+| `composables/usePhysicalKeys.js` | 原始键盘事件层（保留兼容，TestView 使用） |
+| `components/KeyHints.vue` | 固定在 tabbar（50px）上方的快捷键提示条，hints 为空时不渲染 |
+| `components/T9Input.vue` | T9 九键键盘，用于登录页密码输入 |
+| `components/StatusBar.vue` | 右上角状态栏（网络/电池/扫码状态） |
+| `utils/offlineQueue.js` | IndexedDB 离线队列，断网时排队，联网后自动提交 |
 
 ---
 

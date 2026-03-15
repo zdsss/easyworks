@@ -435,22 +435,32 @@ easywork-worker/
 │   │   ├── auth.js         # POST /api/auth/login
 │   │   ├── workorder.js    # GET /api/device/work-orders + submitInspection
 │   │   ├── report.js       # start / report / report/undo / batch
+│   │   ├── scan.js         # scan/start + scan/report（条码扫描）
 │   │   └── call.js         # andon / inspection / transport
 │   ├── stores/
 │   │   ├── auth.js         # 同 admin
 │   │   └── scan.js         # 条码扫描状态
 │   ├── router/
 │   │   └── index.js        # 路由守卫
+│   ├── composables/
+│   │   ├── useHardwareInput.js  # 硬件输入层：扫码枪识别（50ms）/ 导航 / 快捷键
+│   │   ├── usePhysicalKeys.js   # 原始键盘层（保留，TestView 使用）
+│   │   ├── useNetworkStatus.js  # 网络状态监听
+│   │   └── useBatteryStatus.js  # 电池状态监听
 │   ├── utils/
 │   │   ├── statusLabel.js  # orderType × status → 中文标签 + Vant tag 类型
 │   │   └── offlineQueue.js # IndexedDB 离线队列工具
 │   ├── components/
-│   │   └── T9Input.vue     # T9 九键键盘（支持 v-model，含字母切换）
+│   │   ├── KeyHints.vue    # 固定在 tabbar 上方的快捷键提示条
+│   │   ├── T9Input.vue     # T9 九键键盘（支持 v-model，含字母切换）
+│   │   └── StatusBar.vue   # 右上角状态栏（网络/电池/扫码）
 │   └── views/
 │       ├── LoginView.vue            # 工号/密码（T9输入）/设备号
-│       ├── WorkOrderListView.vue    # 下拉刷新 + 工单卡片（orderType 感知状态标签）
-│       ├── WorkOrderDetailView.vue  # 开工/报工（预填剩余量）/质检/撤销
-│       └── CallView.vue             # 三种呼叫类型
+│       ├── WorkOrderListView.vue    # 下拉刷新 + 工单卡片 + 方向键导航 + 扫码开工
+│       ├── WorkOrderDetailView.vue  # 开工/报工/质检/撤销 + 数字快捷键 1-5
+│       ├── ScanView.vue             # 扫码页（开工/报工模式切换，Tab键，摄像头）
+│       ├── CallView.vue             # 三种呼叫类型
+│       └── TestView.vue             # 硬件功能测试页
 ```
 
 ---
@@ -498,7 +508,7 @@ npm run dev   # → http://localhost:5174
 | 工人端工单详情 | 无 `GET /device/work-orders/:id`，通过列表数据本地查找 |
 | MES 集成 | 默认关闭，配置 `app.mes.integration.enabled=true` 启用 |
 | deviceCode | `/device/login` 支持但需数据库中存在对应设备记录 |
-| 条码扫描 | 后端接口已实现（双模式），前端扫码页面待实现 |
+| 条码扫描 | 后端接口已实现（双模式）；前端扫码页面已完成（摄像头 + 扫码枪 + 手动输入） |
 | Java 版本 | Maven 需使用 Java 21（非系统默认 Java 25） |
 | 分页 | 仅 MES logs 返回分页对象；其余列表接口返回 Array |
 | 强制开工配置 | `app.workorder.force-start-before-report: false`，开启后报工前必须先开工 |
@@ -508,7 +518,7 @@ npm run dev   # → http://localhost:5174
 
 ## 十二、验收测试结果
 
-**单元测试：** 140 个，全部通过 ✅（2026-03-14）
+**单元测试：** 147 个，全部通过 ✅（2026-03-15）
 **测试框架：** JUnit 5 + Mockito + Spring Boot Test
 
 | 测试类 | 测试数 |
